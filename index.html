@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Attendance System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo-placeholder">
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="50" cy="30" r="20" fill="currentColor"/>
+                        <path d="M 30 60 Q 30 45 50 45 Q 70 45 70 60 L 70 80 Q 70 85 65 85 L 35 85 Q 30 85 30 80 Z" fill="currentColor"/>
+                    </svg>
+                    <span>MY LOGO</span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <h1 class="page-title">Attendance</h1>
+                <div class="clock-display">
+                    <span id="clock">09:40 AM</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button class="btn-add-employee" id="addEmployeeBtn">
+                    <span class="plus-icon">+</span> Add Employee
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <div id="employeesGrid" class="employees-grid">
+                <!-- Employee cards will be dynamically inserted here -->
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Loading employees...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Employee Card Modal -->
+    <div id="attendanceModal" class="modal hidden">
+        <div class="modal-overlay" id="modalOverlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <div class="modal-body">
+                <h2 id="modalEmployeeName" class="modal-title">Employee Name</h2>
+                <p id="modalEmployeeRole" class="modal-role">Job Title</p>
+
+                <div class="modal-actions">
+                    <button class="btn btn-in" id="btnClockIn">
+                        <span class="action-icon">▼</span>
+                        IN
+                    </button>
+                    <button class="btn btn-out" id="btnClockOut">
+                        <span class="action-icon">▲</span>
+                        OUT
+                    </button>
+                </div>
+
+                <!-- Confirmation Message -->
+                <div id="confirmationMessage" class="confirmation-message hidden">
+                    <div class="confirmation-icon">✓</div>
+                    <p id="confirmationText">Checked in successfully</p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="loading-state hidden">
+                    <div class="spinner-small"></div>
+                    <p>Processing...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Employee Modal -->
+    <div id="addEmployeeModal" class="modal hidden">
+        <div class="modal-overlay" id="addEmployeeOverlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="addEmployeeClose">&times;</button>
+            <div class="modal-body">
+                <h2 class="modal-title">Add New Employee</h2>
+
+                <form id="addEmployeeForm" class="form-group">
+                    <div class="form-field">
+                        <label for="employeeNameInput">Employee Name</label>
+                        <input
+                            type="text"
+                            id="employeeNameInput"
+                            placeholder="John Doe"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-field">
+                        <label for="jobTitleInput">Job Title</label>
+                        <input
+                            type="text"
+                            id="jobTitleInput"
+                            placeholder="Manager"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Add Employee</button>
+                        <button type="button" class="btn btn-secondary" id="cancelAddEmployee">Cancel</button>
+                    </div>
+                </form>
+
+                <div id="addEmployeeMessage" class="confirmation-message hidden">
+                    <div class="confirmation-icon">✓</div>
+                    <p id="addEmployeeMessageText">Employee added successfully</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Toast -->
+    <div id="toastNotification" class="toast-notification hidden">
+        <p id="toastMessage"></p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
