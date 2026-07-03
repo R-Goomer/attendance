@@ -7,6 +7,7 @@ A modern, responsive employee attendance tracking system using Firebase Firestor
 - ✅ Clean employee attendance dashboard
 - ✅ Employee ID-based attendance cards
 - ✅ Month-based attendance storage per employee
+- ✅ Year/month attendance export to Excel
 - ✅ Clock in/out by date, with hours automatically calculated
 - ✅ Firebase Firestore backend for persistent storage
 - ✅ Static hosting friendly
@@ -133,8 +134,10 @@ npx http-server -p 8000
 Then open `http://localhost:8000` in your browser.
 
 Once the server is running:
-1. Click **Add Employee** to create a new employee card
-2. Use **IN** and **OUT** to record attendance
+1. Use the year/month selectors in the header to choose a report period
+2. Click **Download Attendance** to export the selected month's data to Excel
+3. Click **Add Employee** to create a new employee card
+4. Use **IN** and **OUT** to record attendance
 
 ---
 

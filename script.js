@@ -7,6 +7,8 @@ import {
     getDocs,
     setDoc,
     deleteDoc,
+    query,
+    where,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 // ========================================================
@@ -56,6 +58,9 @@ const addEmployeeClose = document.getElementById("addEmployeeClose");
 const cancelAddEmployee = document.getElementById("cancelAddEmployee");
 const employeeIdInput = document.getElementById("employeeIdInput");
 const jobTitleInput = document.getElementById("jobTitleInput");
+const selectYear = document.getElementById("selectYear");
+const selectMonth = document.getElementById("selectMonth");
+const downloadAttendanceBtn = document.getElementById("downloadAttendanceBtn");
 const addEmployeeMessage = document.getElementById("addEmployeeMessage");
 const addEmployeeMessageText = document.getElementById("addEmployeeMessageText");
 
@@ -72,8 +77,182 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupApp() {
     updateClock();
     setInterval(updateClock, 1000);
+    populateMonthYearSelectors();
     loadEmployees();
     setupEventListeners();
+}
+
+function populateMonthYearSelectors() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const startYear = currentYear - 2;
+    const endYear = currentYear + 1;
+
+    for (let year = startYear; year <= endYear; year++) {
+        const option = document.createElement("option");
+        option.value = String(year);
+        option.textContent = String(year);
+        if (year === currentYear) option.selected = true;
+        selectYear.appendChild(option);
+    }
+
+    const monthNames = [
+        "01", "02", "03", "04", "05", "06",
+        "07", "08", "09", "10", "11", "12",
+    ];
+
+    monthNames.forEach((month, index) => {
+        const option = document.createElement("option");
+        option.value = month;
+        option.textContent = `${month} (${new Date(0, index).toLocaleString("default", { month: "short" })})`;
+        if (index === now.getMonth()) option.selected = true;
+        selectMonth.appendChild(option);
+    });
+}
+
+async function downloadAttendanceForMonth() {
+    const selectedYear = selectYear.value;
+    const selectedMonth = selectMonth.value;
+
+    if (!selectedYear || !selectedMonth) {
+        showToast("❌ Select both year and month");
+        return;
+    }
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    try {
+        const employeesSnapshot = await getDocs(collection(db, "employees"));
+        const employeesList = employeesSnapshot.docs.map((docItem) => ({
+            id: docItem.id,
+            ...docItem.data(),
+        }));
+
+        if (employeesList.length === 0) {
+            showToast("❌ No employees found to export");
+            return;
+        }
+
+        employeesList.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        const attendanceQuery = query(
+            collection(db, "attendanceCards"),
+            where("month", "==", monthKey)
+        );
+        const attendanceSnapshot = await getDocs(attendanceQuery);
+        const attendanceMap = {};
+
+        attendanceSnapshot.forEach((docItem) => {
+            attendanceMap[docItem.id] = docItem.data();
+        });
+
+        const daysInMonth = getDaysInMonth(Number(selectedYear), Number(selectedMonth));
+        const rows = [];
+
+        const header1 = ["Date"];
+        const header2 = [""];
+        employeesList.forEach((employee) => {
+            header1.push(employee.name || employee.id, "", "");
+            header2.push("IN", "OUT", "Hours Missed");
+        });
+
+        rows.push(header1);
+        rows.push(header2);
+
+        const totals = employeesList.map(() => ({ present: 0, absent: 0, missedMinutes: 0 }));
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(Number(selectedYear), Number(selectedMonth) - 1, day);
+            const isSunday = date.getDay() === 0;
+            const formattedDate = `${selectedYear}-${selectedMonth}-${String(day).padStart(2, "0")}`;
+            const row = [formattedDate];
+
+            employeesList.forEach((employee, idx) => {
+                const card = attendanceMap[`${employee.id}_${monthKey}`];
+                const dayRecord = card?.attendance?.[String(day)] || null;
+                let inValue = "";
+                let outValue = "";
+                let missedValue = "";
+
+                if (dayRecord) {
+                    if (dayRecord.Status === "A") {
+                        if (!isSunday) {
+                            missedValue = "08:00";
+                            totals[idx].absent += 1;
+                            totals[idx].missedMinutes += 8 * 60;
+                        }
+                    } else {
+                        inValue = dayRecord.in || "";
+                        outValue = dayRecord.out || "";
+                        if (dayRecord.Status === "P") {
+                            totals[idx].present += 1;
+                        }
+
+                        const hours = Number(dayRecord.hours || 0);
+                        if (!outValue && !isSunday) {
+                            missedValue = "08:00";
+                            totals[idx].missedMinutes += 8 * 60;
+                        } else if (hours < 8) {
+                            const missed = Math.round((8 - hours) * 60);
+                            if (missed > 0) {
+                                missedValue = formatMinutes(missed);
+                                totals[idx].missedMinutes += missed;
+                            }
+                        }
+                    }
+                } else {
+                    if (!isSunday) {
+                        missedValue = "08:00";
+                        totals[idx].absent += 1;
+                        totals[idx].missedMinutes += 8 * 60;
+                    }
+                }
+
+                row.push(inValue, outValue, missedValue);
+            });
+
+            rows.push(row);
+        }
+
+        rows.push([]);
+        const totalPresentRow = ["Total Presents"];
+        const totalAbsentRow = ["Total Absents"];
+        const totalMissedRow = ["Total Hours Missed"];
+
+        totals.forEach((item) => {
+            totalPresentRow.push(item.present, "", "");
+            totalAbsentRow.push(item.absent, "", "");
+            totalMissedRow.push("", "", formatMinutes(item.missedMinutes));
+        });
+
+        rows.push(totalPresentRow);
+        rows.push(totalAbsentRow);
+        rows.push(totalMissedRow);
+
+        const worksheet = XLSX.utils.aoa_to_sheet(rows);
+        worksheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }];
+
+        for (let i = 0; i < employeesList.length; i++) {
+            const startCol = 1 + i * 3;
+            worksheet["!merges"].push({ s: { r: 0, c: startCol }, e: { r: 0, c: startCol + 2 } });
+        }
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Attendance_${monthKey}`);
+        XLSX.writeFile(workbook, `attendance_${monthKey}.xlsx`);
+    } catch (error) {
+        console.error("Error exporting attendance:", error);
+        showToast("❌ Failed to download attendance. Check Firebase and try again.");
+    }
+}
+
+function getDaysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+}
+
+function formatMinutes(totalMinutes) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 // ========================================================
@@ -366,6 +545,7 @@ function setupEventListeners() {
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
+    downloadAttendanceBtn.addEventListener("click", downloadAttendanceForMonth);
 
     document.querySelectorAll(".modal-content").forEach((content) => {
         content.addEventListener("click", (event) => event.stopPropagation());

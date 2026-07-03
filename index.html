@@ -28,6 +28,11 @@
             </div>
 
             <div class="header-right">
+                <div class="export-controls">
+                    <select id="selectYear"></select>
+                    <select id="selectMonth"></select>
+                    <button class="btn btn-secondary" id="downloadAttendanceBtn">Download Attendance</button>
+                </div>
                 <button class="btn-add-employee" id="addEmployeeBtn">
                     <span class="plus-icon">+</span> Add Employee
                 </button>
@@ -133,6 +138,7 @@
         <p id="toastMessage"></p>
     </div>
 
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script type="module" src="script.js"></script>
 </body>
 </html>

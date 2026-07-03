@@ -104,6 +104,33 @@ input, textarea {
 .header-right {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.export-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.export-controls select,
+.export-controls button {
+    border-radius: 999px;
+    padding: 0.5rem 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-size: 0.85rem;
+}
+
+.export-controls select {
+    min-width: 5.2rem;
+}
+
+.export-controls button {
+    min-width: auto;
 }
 
 /* Logo Placeholder */
