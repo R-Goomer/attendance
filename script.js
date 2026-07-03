@@ -314,7 +314,7 @@ async function loadEmployees() {
 
         if (employees.length === 0) {
             employees = [
-                { id: "rushil", name: "Rushil Kumar", jobTitle: "Developer" },
+                { id: "rushil", name: "Rushil Goomer", jobTitle: "Developer" },
                 { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
             ];
         }
@@ -322,7 +322,7 @@ async function loadEmployees() {
         console.error("Error loading employees from Firebase:", error);
         showToast("❌ Firebase load failed. Please check your configuration.");
         employees = [
-            { id: "rushil", name: "Rushil Kumar", jobTitle: "Developer" },
+            { id: "rushil", name: "Rushil Goomer", jobTitle: "Developer" },
             { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
         ];
     }

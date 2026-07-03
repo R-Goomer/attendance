@@ -143,9 +143,10 @@ input, textarea {
     font-size: 0.875rem;
 }
 
-.logo-placeholder svg {
-    width: 48px;
-    height: 48px;
+.logo-placeholder img {
+    width: 120px;      /* Adjust as needed */
+    height: auto;     /* Keeps the aspect ratio */
+    display: block;
 }
 
 /* Page Title */
