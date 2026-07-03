@@ -245,6 +245,19 @@ input, textarea {
     box-shadow: var(--shadow-md);
 }
 
+/* Disabled/Greyed Out Button */
+.btn.disabled-btn {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #cccccc;
+    color: #666666;
+}
+
+.btn.disabled-btn:hover {
+    transform: none;
+    box-shadow: none;
+}
+
 .btn-primary {
     background: var(--primary-color);
     color: white;

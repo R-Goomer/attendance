@@ -340,9 +340,19 @@ function showTimePicker(action) {
     pendingClockAction = action;
     populateTimePicker();
     timePickerSection.classList.remove("hidden");
-    btnClockIn.disabled = true;
-    btnClockOut.disabled = true;
-    btnAbsent.disabled = true;
+    
+    // Grey out other buttons based on action
+    if (action === "IN") {
+        btnClockOut.classList.add("disabled-btn");
+        btnAbsent.classList.add("disabled-btn");
+        btnClockOut.disabled = true;
+        btnAbsent.disabled = true;
+    } else if (action === "OUT") {
+        btnClockIn.classList.add("disabled-btn");
+        btnAbsent.classList.add("disabled-btn");
+        btnClockIn.disabled = true;
+        btnAbsent.disabled = true;
+    }
 }
 
 function populateTimePicker() {
@@ -413,6 +423,9 @@ async function submitTimeSelection() {
         if (action === "OUT" && !dayRecord.in) {
             showToast("❌ Cannot clock OUT before IN. Please clock IN first.");
             isProcessing = false;
+            btnClockIn.classList.remove("disabled-btn");
+            btnClockOut.classList.remove("disabled-btn");
+            btnAbsent.classList.remove("disabled-btn");
             btnClockIn.disabled = false;
             btnClockOut.disabled = false;
             btnAbsent.disabled = false;
@@ -458,6 +471,9 @@ async function submitTimeSelection() {
         loadingState.classList.add("hidden");
         showToast("❌ Error: Could not record attendance. Check Firebase setup.");
         isProcessing = false;
+        btnClockIn.classList.remove("disabled-btn");
+        btnClockOut.classList.remove("disabled-btn");
+        btnAbsent.classList.remove("disabled-btn");
         btnClockIn.disabled = false;
         btnClockOut.disabled = false;
         btnAbsent.disabled = false;
@@ -610,6 +626,10 @@ function closeAttendanceModal() {
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
     timePickerSection.classList.add("hidden");
+    // Remove greying and re-enable all buttons
+    btnClockIn.classList.remove("disabled-btn");
+    btnClockOut.classList.remove("disabled-btn");
+    btnAbsent.classList.remove("disabled-btn");
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
@@ -696,9 +716,12 @@ async function handleAbsentAction() {
     if (!selectedEmployee || isProcessing) return;
 
     isProcessing = true;
+    pendingClockAction = "ABSENT";
+    // Grey out IN and OUT buttons
+    btnClockIn.classList.add("disabled-btn");
+    btnClockOut.classList.add("disabled-btn");
     btnClockIn.disabled = true;
     btnClockOut.disabled = true;
-    btnAbsent.disabled = true;
     loadingState.classList.remove("hidden");
     confirmationMessage.classList.add("hidden");
 
@@ -739,9 +762,12 @@ async function handleAbsentAction() {
         loadingState.classList.add("hidden");
         showToast("❌ Error: Could not mark absent. Check Firebase setup.");
         isProcessing = false;
+        btnClockIn.classList.remove("disabled-btn");
+        btnClockOut.classList.remove("disabled-btn");
         btnClockIn.disabled = false;
         btnClockOut.disabled = false;
         btnAbsent.disabled = false;
+        pendingClockAction = null;
     }
 }
 
