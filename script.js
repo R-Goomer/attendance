@@ -42,6 +42,7 @@ const modalOverlay = document.getElementById("modalOverlay");
 const modalClose = document.getElementById("modalClose");
 const btnClockIn = document.getElementById("btnClockIn");
 const btnClockOut = document.getElementById("btnClockOut");
+const btnAbsent = document.getElementById("btnAbsent");
 const confirmationMessage = document.getElementById("confirmationMessage");
 const confirmationText = document.getElementById("confirmationText");
 const loadingState = document.getElementById("loadingState");
@@ -54,7 +55,6 @@ const addEmployeeForm = document.getElementById("addEmployeeForm");
 const addEmployeeClose = document.getElementById("addEmployeeClose");
 const cancelAddEmployee = document.getElementById("cancelAddEmployee");
 const employeeIdInput = document.getElementById("employeeIdInput");
-const employeeNameInput = document.getElementById("employeeNameInput");
 const jobTitleInput = document.getElementById("jobTitleInput");
 const addEmployeeMessage = document.getElementById("addEmployeeMessage");
 const addEmployeeMessageText = document.getElementById("addEmployeeMessageText");
@@ -123,6 +123,7 @@ async function handleClockAction(action) {
     isProcessing = true;
     btnClockIn.disabled = true;
     btnClockOut.disabled = true;
+    btnAbsent.disabled = true;
     loadingState.classList.remove("hidden");
     confirmationMessage.classList.add("hidden");
 
@@ -138,14 +139,20 @@ async function handleClockAction(action) {
         const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
         const dayRecord = { ...(storedAttendance[day] || {}) };
 
+        if (action === "OUT" && !dayRecord.in) {
+            showToast("❌ Cannot clock OUT before IN. Please clock IN first.");
+            isProcessing = false;
+            btnClockIn.disabled = false;
+            btnClockOut.disabled = false;
+            return;
+        }
+
         dayRecord.Status = "P";
         if (action === "IN") {
             dayRecord.in = timeString;
         } else {
             dayRecord.out = timeString;
-            if (dayRecord.in) {
-                dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
-            }
+            dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
         }
 
         storedAttendance[day] = dayRecord;
@@ -178,6 +185,7 @@ async function handleClockAction(action) {
         isProcessing = false;
         btnClockIn.disabled = false;
         btnClockOut.disabled = false;
+        btnAbsent.disabled = false;
     }
 }
 
@@ -185,10 +193,10 @@ async function handleAddEmployee(event) {
     event.preventDefault();
 
     const employeeId = employeeIdInput.value.trim();
-    const name = employeeNameInput.value.trim();
+    const name = employeeId;
     const jobTitle = jobTitleInput.value.trim();
 
-    if (!employeeId || !name || !jobTitle) {
+    if (!employeeId || !jobTitle) {
         showToast("❌ Please fill in all fields");
         return;
     }
@@ -315,6 +323,7 @@ function openAttendanceModal(employee) {
     loadingState.classList.add("hidden");
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
+    btnAbsent.disabled = false;
     attendanceModal.classList.remove("hidden");
 }
 
@@ -323,11 +332,13 @@ function closeAttendanceModal() {
     selectedEmployee = null;
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
+    btnClockIn.disabled = false;
+    btnClockOut.disabled = false;
+    btnAbsent.disabled = false;
 }
 
 function openAddEmployeeModal() {
     employeeIdInput.value = "";
-    employeeNameInput.value = "";
     jobTitleInput.value = "";
     addEmployeeMessage.classList.add("hidden");
     addEmployeeForm.style.display = "flex";
@@ -337,7 +348,6 @@ function openAddEmployeeModal() {
 function closeAddEmployeeModal() {
     addEmployeeModal.classList.add("hidden");
     employeeIdInput.value = "";
-    employeeNameInput.value = "";
     jobTitleInput.value = "";
 }
 
@@ -347,6 +357,7 @@ function closeAddEmployeeModal() {
 function setupEventListeners() {
     btnClockIn.addEventListener("click", () => handleClockAction("IN"));
     btnClockOut.addEventListener("click", () => handleClockAction("OUT"));
+    btnAbsent.addEventListener("click", handleAbsentAction);
     modalClose.addEventListener("click", closeAttendanceModal);
     modalOverlay.addEventListener("click", closeAttendanceModal);
 
@@ -397,6 +408,59 @@ function computeHours(inTime, outTime) {
     let diff = (outDate - inDate) / (1000 * 60 * 60);
     if (diff < 0) diff += 24;
     return Math.round(diff * 10) / 10;
+}
+
+async function handleAbsentAction() {
+    if (!selectedEmployee || isProcessing) return;
+
+    isProcessing = true;
+    btnClockIn.disabled = true;
+    btnClockOut.disabled = true;
+    btnAbsent.disabled = true;
+    loadingState.classList.remove("hidden");
+    confirmationMessage.classList.add("hidden");
+
+    try {
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const day = String(now.getDate());
+        const attendanceDocId = `${selectedEmployee.id}_${month}`;
+
+        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceSnap = await getDoc(attendanceRef);
+        const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
+
+        storedAttendance[day] = { Status: "A" };
+
+        await setDoc(
+            attendanceRef,
+            {
+                employeeId: selectedEmployee.id,
+                month,
+                attendance: storedAttendance,
+            },
+            { merge: true }
+        );
+
+        confirmationText.textContent = `${selectedEmployee.name} - Marked absent for today`;
+        confirmationMessage.classList.remove("hidden");
+        loadingState.classList.add("hidden");
+
+        setTimeout(() => {
+            closeAttendanceModal();
+            isProcessing = false;
+        }, 3000);
+
+        showToast("✓ Absent recorded successfully");
+    } catch (error) {
+        console.error("Error marking absent:", error);
+        loadingState.classList.add("hidden");
+        showToast("❌ Error: Could not mark absent. Check Firebase setup.");
+        isProcessing = false;
+        btnClockIn.disabled = false;
+        btnClockOut.disabled = false;
+        btnAbsent.disabled = false;
+    }
 }
 
 function showToast(message) {

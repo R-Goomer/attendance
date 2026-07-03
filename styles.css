@@ -205,6 +205,18 @@ input, textarea {
     box-shadow: var(--shadow-md);
 }
 
+.btn-absent {
+    background: #ff8c00;
+    color: white;
+    flex: 1;
+}
+
+.btn-absent:hover {
+    background: #e67600;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
 .btn-primary {
     background: var(--primary-color);
     color: white;
