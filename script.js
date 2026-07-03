@@ -1,7 +1,28 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import {
+    getFirestore,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    setDoc,
+    deleteDoc,
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
 // ========================================================
-// CONFIGURATION
+// FIREBASE CONFIGURATION
 // ========================================================
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby1kBbiRONjMqNpeKTFNSJue4R6VhNtNs1KuOT3xz5HreoVujfaphe3bCe7dF6gOLIj/exec";
+const firebaseConfig = {
+    apiKey: "AIzaSyAwxg4_ZFpSUhN2jR6m4OK906xIw0-G1Wk",
+    authDomain: "attendance-38ca5.firebaseapp.com",
+    projectId: "attendance-38ca5",
+    storageBucket: "attendance-38ca5.firebasestorage.app",
+    messagingSenderId: "30313950569",
+    appId: "1:30313950569:web:5d4f1a970ef12ea381a1f8",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 // ========================================================
 // STATE MANAGEMENT
@@ -32,6 +53,7 @@ const addEmployeeOverlay = document.getElementById("addEmployeeOverlay");
 const addEmployeeForm = document.getElementById("addEmployeeForm");
 const addEmployeeClose = document.getElementById("addEmployeeClose");
 const cancelAddEmployee = document.getElementById("cancelAddEmployee");
+const employeeIdInput = document.getElementById("employeeIdInput");
 const employeeNameInput = document.getElementById("employeeNameInput");
 const jobTitleInput = document.getElementById("jobTitleInput");
 const addEmployeeMessage = document.getElementById("addEmployeeMessage");
@@ -44,10 +66,10 @@ const toastMessage = document.getElementById("toastMessage");
 // INITIALIZATION
 // ========================================================
 document.addEventListener("DOMContentLoaded", () => {
-    initializeApp();
+    setupApp();
 });
 
-function initializeApp() {
+function setupApp() {
     updateClock();
     setInterval(updateClock, 1000);
     loadEmployees();
@@ -59,97 +81,167 @@ function initializeApp() {
 // ========================================================
 function updateClock() {
     const now = new Date();
-    const hours = String(now.getHours()).padStart(2, "0");
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    const seconds = String(now.getSeconds()).padStart(2, "0");
-
     const ampm = now.getHours() >= 12 ? "PM" : "AM";
     const displayHours = now.getHours() % 12 || 12;
-    const displayTime = `${String(displayHours).padStart(2, "0")}:${minutes} ${ampm}`;
-
+    const displayTime = `${String(displayHours).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} ${ampm}`;
     clockDisplay.textContent = displayTime;
 }
 
 // ========================================================
-// API CALLS
+// FIRESTORE OPERATIONS
 // ========================================================
-async function callGoogleAppsScript(action, payload = {}) {
-    if (!GOOGLE_APPS_SCRIPT_URL.includes("script.google.com")) {
-        showToast("❌ Error: Google Apps Script URL not configured. Check script.js configuration.");
-        console.error("Google Apps Script URL not set:", GOOGLE_APPS_SCRIPT_URL);
-        return null;
-    }
-
+async function loadEmployees() {
     try {
-        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                action: action,
-                ...payload,
-            }),
-        });
+        const querySnapshot = await getDocs(collection(db, "employees"));
+        employees = querySnapshot.docs.map((docItem) => ({
+            id: docItem.id,
+            ...docItem.data(),
+        }));
+        employees.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-        // Note: mode: 'no-cors' means we can't read the response body directly,
-        // so we'll assume success if there's no network error
-        return { success: true };
+        if (employees.length === 0) {
+            employees = [
+                { id: "rushil", name: "Rushil Kumar", jobTitle: "Developer" },
+                { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
+            ];
+        }
     } catch (error) {
-        console.error("Error calling Google Apps Script:", error);
-        showToast("❌ Error: Could not connect to server. Check your internet connection.");
-        return null;
+        console.error("Error loading employees from Firebase:", error);
+        showToast("❌ Firebase load failed. Please check your configuration.");
+        employees = [
+            { id: "rushil", name: "Rushil Kumar", jobTitle: "Developer" },
+            { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
+        ];
     }
+
+    renderEmployees();
 }
 
-async function loadEmployees() {
-    // Since we can't read responses with no-cors, we'll use a workaround
-    // Employees will be fetched from another endpoint or hardcoded
-    // For now, we'll fetch them directly using JSONP or another method
+async function handleClockAction(action) {
+    if (!selectedEmployee || isProcessing) return;
+
+    isProcessing = true;
+    btnClockIn.disabled = true;
+    btnClockOut.disabled = true;
+    loadingState.classList.remove("hidden");
+    confirmationMessage.classList.add("hidden");
 
     try {
-        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                action: "get-employees",
-            }),
-        }).catch(() => {
-            // If CORS error, show a demo with sample data
-            return null;
-        });
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const day = String(now.getDate());
+        const timeString = formatTime(now);
+        const attendanceDocId = `${selectedEmployee.id}_${month}`;
 
-        if (response) {
-            const data = await response.json();
-            if (data.success && data.data) {
-                employees = data.data;
+        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceSnap = await getDoc(attendanceRef);
+        const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
+        const dayRecord = { ...(storedAttendance[day] || {}) };
+
+        dayRecord.Status = "P";
+        if (action === "IN") {
+            dayRecord.in = timeString;
+        } else {
+            dayRecord.out = timeString;
+            if (dayRecord.in) {
+                dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
             }
         }
 
-        // If no employees loaded, use sample data for demo
-        if (employees.length === 0) {
-            employees = [
-                { id: 1, name: "Abigail Peterson", jobTitle: "Manager" },
-                { id: 2, name: "Michael Johnson", jobTitle: "Developer" },
-                { id: 3, name: "Sarah Williams", jobTitle: "Designer" },
-                { id: 4, name: "James Brown", jobTitle: "Analyst" },
-            ];
+        storedAttendance[day] = dayRecord;
+
+        await setDoc(
+            attendanceRef,
+            {
+                employeeId: selectedEmployee.id,
+                month,
+                attendance: storedAttendance,
+            },
+            { merge: true }
+        );
+
+        const actionText = action === "IN" ? "Checked in" : "Checked out";
+        confirmationText.textContent = `${selectedEmployee.name} - ${actionText} at ${formatTimestamp(now)}`;
+        confirmationMessage.classList.remove("hidden");
+        loadingState.classList.add("hidden");
+
+        setTimeout(() => {
+            closeAttendanceModal();
+            isProcessing = false;
+        }, 3000);
+
+        showToast(`✓ ${actionText} successfully`);
+    } catch (error) {
+        console.error("Error during clock action:", error);
+        loadingState.classList.add("hidden");
+        showToast("❌ Error: Could not record attendance. Check Firebase setup.");
+        isProcessing = false;
+        btnClockIn.disabled = false;
+        btnClockOut.disabled = false;
+    }
+}
+
+async function handleAddEmployee(event) {
+    event.preventDefault();
+
+    const employeeId = employeeIdInput.value.trim();
+    const name = employeeNameInput.value.trim();
+    const jobTitle = jobTitleInput.value.trim();
+
+    if (!employeeId || !name || !jobTitle) {
+        showToast("❌ Please fill in all fields");
+        return;
+    }
+
+    addEmployeeForm.style.display = "none";
+    const spinner = document.createElement("div");
+    spinner.className = "loading-state";
+    spinner.innerHTML = '<div class="spinner-small"></div><p>Adding employee...</p>';
+    addEmployeeForm.parentElement.appendChild(spinner);
+
+    try {
+        const employeeRef = doc(db, "employees", employeeId);
+        const existing = await getDoc(employeeRef);
+        if (existing.exists()) {
+            spinner.remove();
+            addEmployeeForm.style.display = "flex";
+            showToast("❌ Employee ID already exists. Choose a unique ID.");
+            return;
         }
 
+        await setDoc(employeeRef, { name, jobTitle });
+        employees.push({ id: employeeId, name, jobTitle });
         renderEmployees();
+
+        addEmployeeMessageText.textContent = `${name} added successfully!`;
+        addEmployeeMessage.classList.remove("hidden");
+        spinner.remove();
+
+        setTimeout(() => {
+            closeAddEmployeeModal();
+            showToast(`✓ Employee ${name} added`);
+        }, 2000);
     } catch (error) {
-        console.error("Error loading employees:", error);
-        // Use sample data on error
-        employees = [
-            { id: 1, name: "Abigail Peterson", jobTitle: "Manager" },
-            { id: 2, name: "Michael Johnson", jobTitle: "Developer" },
-            { id: 3, name: "Sarah Williams", jobTitle: "Designer" },
-            { id: 4, name: "James Brown", jobTitle: "Analyst" },
-        ];
+        console.error("Error adding employee:", error);
+        spinner.remove();
+        addEmployeeForm.style.display = "flex";
+        showToast("❌ Error: Could not add employee. Check Firebase setup.");
+    }
+}
+
+async function deleteEmployee(employee) {
+    if (!confirm(`Delete ${employee.name}? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        await deleteDoc(doc(db, "employees", employee.id));
+        employees = employees.filter((current) => current.id !== employee.id);
         renderEmployees();
+        showToast(`✓ Employee ${employee.name} deleted`);
+    } catch (error) {
+        console.error("Error deleting employee:", error);
+        showToast("❌ Error: Could not delete employee. Check Firebase setup.");
     }
 }
 
@@ -181,13 +273,13 @@ function createEmployeeCard(employee) {
     card.innerHTML = `
         <div class="card-header">
             <div></div>
-            <button class="card-delete-btn" data-employee-id="${employee.id}" title="Delete employee">
+            <button class="card-delete-btn" data-employee-id="${escapeHtml(employee.id)}" title="Delete employee">
                 🗑️
             </button>
         </div>
         <div class="card-clickable-area">
             <div class="card-info">
-                <div class="employee-name">${escapeHtml(employee.name)}</div>
+                <div class="employee-name">${escapeHtml(employee.name)} <span class="employee-id">(${escapeHtml(employee.id)})</span></div>
                 <div class="employee-role">${escapeHtml(employee.jobTitle)}</div>
                 <div class="card-badge">
                     <span>●</span> Available
@@ -197,17 +289,15 @@ function createEmployeeCard(employee) {
         </div>
     `;
 
-    // Click handler for the card itself (to open modal)
-    card.addEventListener("click", (e) => {
-        if (!e.target.closest(".card-delete-btn")) {
+    card.addEventListener("click", (event) => {
+        if (!event.target.closest(".card-delete-btn")) {
             openAttendanceModal(employee);
         }
     });
 
-    // Delete button handler
     const deleteBtn = card.querySelector(".card-delete-btn");
-    deleteBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
+    deleteBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
         deleteEmployee(employee);
     });
 
@@ -236,6 +326,7 @@ function closeAttendanceModal() {
 }
 
 function openAddEmployeeModal() {
+    employeeIdInput.value = "";
     employeeNameInput.value = "";
     jobTitleInput.value = "";
     addEmployeeMessage.classList.add("hidden");
@@ -245,165 +336,32 @@ function openAddEmployeeModal() {
 
 function closeAddEmployeeModal() {
     addEmployeeModal.classList.add("hidden");
+    employeeIdInput.value = "";
     employeeNameInput.value = "";
     jobTitleInput.value = "";
-}
-
-// ========================================================
-// ACTION HANDLERS
-// ========================================================
-async function handleClockAction(action) {
-    if (!selectedEmployee || isProcessing) return;
-
-    isProcessing = true;
-    btnClockIn.disabled = true;
-    btnClockOut.disabled = true;
-    loadingState.classList.remove("hidden");
-    confirmationMessage.classList.add("hidden");
-
-    try {
-        const result = await callGoogleAppsScript(action === "IN" ? "clock-in" : "clock-out", {
-            employeeName: selectedEmployee.name,
-        });
-
-        if (result && result.success) {
-            // Show confirmation
-            const actionText = action === "IN" ? "Checked in" : "Checked out";
-            const now = new Date();
-            const timestamp = formatTimestamp(now);
-
-            confirmationText.textContent = `${selectedEmployee.name} - ${actionText} at ${timestamp}`;
-            confirmationMessage.classList.remove("hidden");
-            loadingState.classList.add("hidden");
-
-            // Close modal after 3 seconds
-            setTimeout(() => {
-                closeAttendanceModal();
-                isProcessing = false;
-            }, 3000);
-
-            showToast(`✓ ${actionText} successfully`);
-        } else {
-            loadingState.classList.add("hidden");
-            showToast("❌ Error: Could not record action. Try again.");
-            isProcessing = false;
-            btnClockIn.disabled = false;
-            btnClockOut.disabled = false;
-        }
-    } catch (error) {
-        console.error("Error during clock action:", error);
-        loadingState.classList.add("hidden");
-        showToast("❌ Error: Something went wrong. Try again.");
-        isProcessing = false;
-        btnClockIn.disabled = false;
-        btnClockOut.disabled = false;
-    }
-}
-
-async function handleAddEmployee(e) {
-    e.preventDefault();
-
-    const name = employeeNameInput.value.trim();
-    const jobTitle = jobTitleInput.value.trim();
-
-    if (!name || !jobTitle) {
-        showToast("❌ Please fill in all fields");
-        return;
-    }
-
-    addEmployeeForm.style.display = "none";
-    const spinner = document.createElement("div");
-    spinner.className = "loading-state";
-    spinner.innerHTML = '<div class="spinner-small"></div><p>Adding employee...</p>';
-    addEmployeeForm.parentElement.appendChild(spinner);
-
-    try {
-        const result = await callGoogleAppsScript("add-employee", {
-            employeeName: name,
-            jobTitle: jobTitle,
-        });
-
-        if (result && result.success) {
-            // Add to local array
-            const newId = employees.length > 0 ? Math.max(...employees.map(e => e.id)) + 1 : 1;
-            employees.push({
-                id: newId,
-                name: name,
-                jobTitle: jobTitle,
-            });
-
-            renderEmployees();
-            addEmployeeMessageText.textContent = `${name} added successfully!`;
-            addEmployeeMessage.classList.remove("hidden");
-            spinner.remove();
-
-            setTimeout(() => {
-                closeAddEmployeeModal();
-                showToast(`✓ Employee ${name} added`);
-            }, 2000);
-        } else {
-            spinner.remove();
-            addEmployeeForm.style.display = "flex";
-            showToast("❌ Error: Could not add employee");
-        }
-    } catch (error) {
-        console.error("Error adding employee:", error);
-        spinner.remove();
-        addEmployeeForm.style.display = "flex";
-        showToast("❌ Error: Something went wrong");
-    }
-}
-
-async function deleteEmployee(employee) {
-    if (!confirm(`Delete ${employee.name}? This action cannot be undone.`)) {
-        return;
-    }
-
-    try {
-        const result = await callGoogleAppsScript("delete-employee", {
-            employeeName: employee.name,
-        });
-
-        if (result && result.success) {
-            employees = employees.filter(e => e.id !== employee.id);
-            renderEmployees();
-            showToast(`✓ Employee ${employee.name} deleted`);
-        } else {
-            showToast("❌ Error: Could not delete employee");
-        }
-    } catch (error) {
-        console.error("Error deleting employee:", error);
-        showToast("❌ Error: Something went wrong");
-    }
 }
 
 // ========================================================
 // EVENT LISTENERS
 // ========================================================
 function setupEventListeners() {
-    // Attendance Modal
     btnClockIn.addEventListener("click", () => handleClockAction("IN"));
     btnClockOut.addEventListener("click", () => handleClockAction("OUT"));
     modalClose.addEventListener("click", closeAttendanceModal);
     modalOverlay.addEventListener("click", closeAttendanceModal);
 
-    // Add Employee Modal
     addEmployeeBtn.addEventListener("click", openAddEmployeeModal);
     addEmployeeClose.addEventListener("click", closeAddEmployeeModal);
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
 
-    // Prevent modal close when clicking inside the content
     document.querySelectorAll(".modal-content").forEach((content) => {
-        content.addEventListener("click", (e) => {
-            e.stopPropagation();
-        });
+        content.addEventListener("click", (event) => event.stopPropagation());
     });
 
-    // Close modals on Escape key
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
             closeAttendanceModal();
             closeAddEmployeeModal();
         }
@@ -413,6 +371,10 @@ function setupEventListeners() {
 // ========================================================
 // UTILITY FUNCTIONS
 // ========================================================
+function formatTime(date) {
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function formatTimestamp(date) {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
@@ -422,6 +384,19 @@ function formatTimestamp(date) {
     const seconds = String(date.getSeconds()).padStart(2, "0");
 
     return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+function computeHours(inTime, outTime) {
+    const [inHour, inMinute] = inTime.split(":").map(Number);
+    const [outHour, outMinute] = outTime.split(":").map(Number);
+    const inDate = new Date();
+    inDate.setHours(inHour, inMinute, 0, 0);
+    const outDate = new Date();
+    outDate.setHours(outHour, outMinute, 0, 0);
+
+    let diff = (outDate - inDate) / (1000 * 60 * 60);
+    if (diff < 0) diff += 24;
+    return Math.round(diff * 10) / 10;
 }
 
 function showToast(message) {

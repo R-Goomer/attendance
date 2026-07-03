@@ -1,310 +1,187 @@
 # Employee Attendance System
 
-A modern, responsive employee attendance tracking system hosted on GitHub Pages with data logging to Google Sheets via Google Apps Script.
+A modern, responsive employee attendance tracking system using Firebase Firestore.
 
 ## Features
 
-- ✅ Clean, modern dashboard with employee profile cards
-- ✅ Real-time digital clock
-- ✅ Click-to-check-in/out modal system
-- ✅ Smooth confirmations and loading states
-- ✅ Add/delete employees with Google Sheet sync
-- ✅ Full Google Sheets integration
-- ✅ GitHub Pages compatible (static hosting)
+- ✅ Clean employee attendance dashboard
+- ✅ Employee ID-based attendance cards
+- ✅ Month-based attendance storage per employee
+- ✅ Clock in/out by date, with hours automatically calculated
+- ✅ Firebase Firestore backend for persistent storage
+- ✅ Static hosting friendly
 
 ---
 
-## Setup Instructions
+## Firebase Setup
 
-### Part 1: Google Sheet Setup
+### 1. Create a Firebase Project
 
-1. **Create a new Google Sheet** for your attendance system
-2. **Create two sheets** within the spreadsheet:
-   - Sheet 1: Name it **"Employees"**
-   - Sheet 2: Name it **"Attendance"**
+1. Go to https://console.firebase.google.com/
+2. Create a new project or use an existing one
+3. Add a new Web App to the project
 
-3. **Set up the "Employees" sheet** with these columns:
-   - Column A: `Employee ID` (e.g., 1, 2, 3)
-   - Column B: `Name` (e.g., John Doe)
-   - Column C: `Job Title` (e.g., Manager)
+### 2. Enable Firestore
 
-   Example data:
-   ```
-   Employee ID | Name                | Job Title
-   1           | Abigail Peterson    | Manager
-   2           | Michael Johnson     | Developer
-   3           | Sarah Williams      | Designer
-   ```
+1. Navigate to **Build > Firestore Database**
+2. Click **Create database**
+3. Choose **Start in test mode** for initial development
+4. Choose your preferred Cloud Firestore location
 
-4. **Set up the "Attendance" sheet** with these columns:
-   - Column A: `Timestamp` (e.g., 2026-07-02 09:40:15)
-   - Column B: `Employee Name` (e.g., Abigail Peterson)
-   - Column C: `Action` (IN or OUT)
-   - Column D: `Time` (HH:MM:SS)
+### 3. Copy Firebase Config
 
-   *Note: Data will be automatically appended by the Apps Script*
+From your Firebase Web App settings, copy the config object and paste it into `script.js` under `firebaseConfig`:
 
----
+```js
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
+};
+```
 
-### Part 2: Deploy Google Apps Script
+### 4. Update Firestore Rules for Development
 
-1. **Open your Google Sheet** and go to **Extensions > Apps Script**
+For local testing, you can use this simple rule set in Firestore:
 
-2. **Clear the existing code** and paste the following Google Apps Script code:
-
-```javascript
-// Configuration
-const SHEET_ID = "YOUR_SHEET_ID_HERE"; // Replace with your Google Sheet ID
-const EMPLOYEES_SHEET = "Employees";
-const ATTENDANCE_SHEET = "Attendance";
-
-// Handle POST requests from the frontend
-function doPost(e) {
-  try {
-    const sheet = SpreadsheetApp.openById(SHEET_ID);
-    
-    // Parse request parameters
-    const params = JSON.parse(e.postData.contents);
-    const action = params.action; // "clock-in", "clock-out", "add-employee", "delete-employee", "get-employees"
-    
-    if (action === "clock-in" || action === "clock-out") {
-      return handleClocking(sheet, params);
-    } else if (action === "add-employee") {
-      return handleAddEmployee(sheet, params);
-    } else if (action === "delete-employee") {
-      return handleDeleteEmployee(sheet, params);
-    } else if (action === "get-employees") {
-      return handleGetEmployees(sheet);
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
     }
-    
-    return createResponse(false, "Unknown action");
-  } catch (error) {
-    Logger.log("Error: " + error);
-    return createResponse(false, error.toString());
   }
-}
-
-// Handle clock in/out actions
-function handleClocking(sheet, params) {
-  try {
-    const employeeName = params.employeeName;
-    const action = params.action;
-    
-    const attendanceSheet = sheet.getSheetByName(ATTENDANCE_SHEET);
-    const now = new Date();
-    const timestamp = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-    const time = Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
-    
-    // Append data to the Attendance sheet
-    attendanceSheet.appendRow([timestamp, employeeName, action === "clock-in" ? "IN" : "OUT", time]);
-    
-    return createResponse(true, `${employeeName} - ${action === "clock-in" ? "Checked in" : "Checked out"} at ${timestamp}`);
-  } catch (error) {
-    return createResponse(false, error.toString());
-  }
-}
-
-// Handle adding a new employee
-function handleAddEmployee(sheet, params) {
-  try {
-    const employeeName = params.employeeName;
-    const jobTitle = params.jobTitle;
-    
-    const employeesSheet = sheet.getSheetByName(EMPLOYEES_SHEET);
-    const lastRow = employeesSheet.getLastRow();
-    const lastId = employeesSheet.getRange(lastRow, 1).getValue();
-    const newId = typeof lastId === "number" ? lastId + 1 : 1;
-    
-    employeesSheet.appendRow([newId, employeeName, jobTitle]);
-    
-    return createResponse(true, `Employee ${employeeName} added successfully`);
-  } catch (error) {
-    return createResponse(false, error.toString());
-  }
-}
-
-// Handle deleting an employee
-function handleDeleteEmployee(sheet, params) {
-  try {
-    const employeeName = params.employeeName;
-    
-    const employeesSheet = sheet.getSheetByName(EMPLOYEES_SHEET);
-    const range = employeesSheet.getRange(1, 1, employeesSheet.getLastRow(), 3);
-    const values = range.getValues();
-    
-    for (let i = values.length - 1; i > 0; i--) {
-      if (values[i][1] === employeeName) {
-        employeesSheet.deleteRow(i + 1);
-        return createResponse(true, `Employee ${employeeName} deleted successfully`);
-      }
-    }
-    
-    return createResponse(false, "Employee not found");
-  } catch (error) {
-    return createResponse(false, error.toString());
-  }
-}
-
-// Get all employees
-function handleGetEmployees(sheet) {
-  try {
-    const employeesSheet = sheet.getSheetByName(EMPLOYEES_SHEET);
-    const range = employeesSheet.getRange(2, 1, employeesSheet.getLastRow() - 1, 3); // Skip header
-    const values = range.getValues();
-    
-    const employees = values.map(row => ({
-      id: row[0],
-      name: row[1],
-      jobTitle: row[2]
-    }));
-    
-    return createResponse(true, "Employees retrieved successfully", employees);
-  } catch (error) {
-    return createResponse(false, error.toString());
-  }
-}
-
-// Create a CORS-enabled response
-function createResponse(success, message, data = null) {
-  const response = {
-    success: success,
-    message: message,
-    data: data,
-    timestamp: new Date().toISOString()
-  };
-  
-  return ContentService
-    .createTextOutput(JSON.stringify(response))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 ```
 
-3. **Update the `SHEET_ID`**:
-   - Open your Google Sheet
-   - Copy the ID from the URL (the long alphanumeric string between `/d/` and `/edit`)
-   - Paste it in the Apps Script where it says `"YOUR_SHEET_ID_HERE"`
-
-4. **Save the script** (Ctrl+S or Cmd+S)
-
-5. **Deploy as Web App**:
-   - Click **"Deploy"** button (top right)
-   - Select **"New deployment"**
-   - Choose **"Type > Web app"**
-   - Set **"Execute as"** to your Google account
-   - Set **"Who has access"** to **"Anyone"**
-   - Click **"Deploy"**
-   - Copy the deployment URL (you'll need this for the frontend)
-
-6. **Note the Web App URL** - it looks like: `https://script.google.com/macros/d/[ID]/userwithlogin` or similar
-
-https://script.google.com/macros/s/AKfycby1kBbiRONjMqNpeKTFNSJue4R6VhNtNs1KuOT3xz5HreoVujfaphe3bCe7dF6gOLIj/exec
+> Important: open rules are not safe for production. Lock them down before deploying publicly.
 
 ---
 
-### Part 3: Deploy Frontend to GitHub Pages
+## How Attendance is Stored
 
-1. **Create a GitHub repository** named `attendance` (or your preferred name)
+This app stores data in Firestore with two collections:
 
-2. **Push the following files** to the repository:
-   - `index.html`
-   - `styles.css`
-   - `script.js`
-   - `readme.md`
+- `employees`
+  - Each document ID is the `employeeId`
+  - Fields: `name`, `jobTitle`
 
-3. **Add your Google Apps Script Web App URL** to `script.js`:
-   - Open `script.js`
-   - Find line: `const GOOGLE_APPS_SCRIPT_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";`
-   - Replace with your actual Web App URL from Part 2, step 6
+- `attendanceCards`
+  - Each document ID is `employeeId_month` (for example `rushil_2026-07`)
+  - Fields:
+    - `employeeId`
+    - `month`
+    - `attendance` (object keyed by day of month)
 
-4. **Enable GitHub Pages**:
-   - Go to repository **Settings > Pages**
-   - Set **Source** to **"Deploy from a branch"**
-   - Set **Branch** to **"main"** and **folder** to **"/ (root)"**
-   - Click **Save**
-   - Your site will be live at `https://<your-username>.github.io/attendance/`
+Example attendance document:
 
----
-
-## Configuration
-
-### Frontend Configuration (`script.js`)
-
-At the top of `script.js`, you'll find:
-
-```javascript
-const GOOGLE_APPS_SCRIPT_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";
+```json
+{
+  "employeeId": "rushil",
+  "month": "2026-07",
+  "attendance": {
+    "1": {
+      "Status": "P",
+      "in": "09:55",
+      "out": "18:01",
+      "hours": 8.1
+    },
+    "2": {
+      "Status": "P",
+      "in": "10:33",
+      "out": "22:33",
+      "hours": 12.0
+    },
+    "3": {
+      "Status": "A"
+    },
+    "4": {
+      "Status": "S"
+    }
+  }
+}
 ```
 
-Replace `YOUR_GOOGLE_APPS_SCRIPT_URL_HERE` with the Web App URL from your Google Apps Script deployment.
+---
+
+## Running the App
+
+### Development Server
+
+Since Firebase uses ES modules, you need to run the app through an HTTP server (not `file://` protocol).
+
+**Option 1: Using the provided script (macOS/Linux)**
+```bash
+./serve.sh
+```
+Then open `http://localhost:8000` in your browser.
+
+**Option 2: Using Python directly**
+```bash
+python3 -m http.server 8000
+```
+Then open `http://localhost:8000` in your browser.
+
+**Option 3: Using Node.js**
+```bash
+npx http-server -p 8000
+```
+Then open `http://localhost:8000` in your browser.
+
+Once the server is running:
+1. Click **Add Employee** to create a new employee card
+2. Use **IN** and **OUT** to record attendance
 
 ---
 
-## Usage
+## Notes
 
-1. **Add Employees**: Click the "+ Add Employee" button in the top right
-2. **Clock In/Out**: Click any employee card to open the modal, then click IN or OUT
-3. **Delete Employee**: Click the trash icon on an employee card
-4. **Real-time Clock**: The clock automatically updates every second
+- Employee records are stored in Firestore
+- Attendance is grouped by `employeeId` and `month`
+- Each day entry is appended into the monthly attendance card automatically
 
 ---
 
 ## Files Included
 
-- **index.html** - Main HTML structure with semantic markup
-- **styles.css** - Modern grid-based layout with animations
-- **script.js** - Frontend logic, API calls, and UI state management
-- **Google Apps Script Code** - Backend for handling clocking and employee management
+- `index.html` - Main HTML structure with semantic markup
+- `styles.css` - UI styling and layout
+- `script.js` - Firebase attendance logic and app state
+- `readme.md` - Setup and Firebase instructions
 
 ---
 
 ## Troubleshooting
 
-### "CORS Error" or data not saving?
-- Ensure your Google Apps Script is deployed as a **Web App** with **"Anyone"** access
-- Verify the Web App URL is correct in `script.js`
-- Check the Apps Script logs for errors (Extensions > Apps Script > View > Logs)
-
-### Employees not loading?
-- Verify the "Employees" sheet exists and has data with headers in the first row
-- Check that your `SHEET_ID` in the Apps Script is correct
-
-### GitHub Pages not working?
-- Ensure the repository is public
-- Verify GitHub Pages is enabled in repository settings
-- Files must be named exactly: `index.html`, `styles.css`, `script.js`
+- **CORS Error or "Unsafe attempt to load URL file://"**: You must run the app through an HTTP server, not directly from `file://`. Use the provided `serve.sh` script or `python3 -m http.server 8000`.
+- If employees do not load, ensure Firestore is enabled and your Firebase config is correct.
+- If attendance is not saving, verify Firestore rules allow reads and writes, and that `firebaseConfig` in `script.js` is filled.
+- If the app fails to start, confirm your browser supports ES modules and you are running it via HTTP server.
 
 ---
 
 ## Security Notes
 
-- The Google Apps Script is deployed with **"Anyone"** access, allowing the public frontend to write data
-- No authentication is required for this system
-- This is suitable for internal/trusted use cases
-- For production with sensitive data, consider adding authentication
+- The example setup uses open Firestore rules for development.
+- Secure your database in production by restricting reads and writes.
+- Consider Firebase Authentication if you need access control.
 
 ---
 
 ## Customization
 
-### Change Logo
-- In `index.html`, find the `<!-- Logo -->` section
-- Replace with your company logo (URL or local file)
-
-### Change Colors & Fonts
-- Edit the CSS variables at the top of `styles.css`:
-  ```css
-  :root {
-    --primary-color: #007bff;
-    --secondary-color: #6c757d;
-    /* etc. */
-  }
-  ```
-
-### Add More Employees
-- Add rows to the "Employees" sheet manually, or use the "+ Add Employee" button in the UI
+- Change the `employeeId` values in the UI when adding employees.
+- To customize the UI, edit `styles.css`.
+- Use Firestore console to inspect `employees` and `attendanceCards` collections.
 
 ---
 
 ## License
 
 Open source. Use and modify as needed for your organization.
+
+
