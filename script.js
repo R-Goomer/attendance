@@ -68,9 +68,14 @@ const selectMonth = document.getElementById("selectMonth");
 const downloadAttendanceBtn = document.getElementById("downloadAttendanceBtn");
 const addEmployeeMessage = document.getElementById("addEmployeeMessage");
 const addEmployeeMessageText = document.getElementById("addEmployeeMessageText");
+const timePickerSection = document.getElementById("timePickerSection");
+const timePicker = document.getElementById("timePicker");
+const btnTimeSubmit = document.getElementById("btnTimeSubmit");
 
 const toastNotification = document.getElementById("toastNotification");
 const toastMessage = document.getElementById("toastMessage");
+
+let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
 
 // ========================================================
 // INITIALIZATION
@@ -330,22 +335,75 @@ async function loadEmployees() {
     renderEmployees();
 }
 
-async function handleClockAction(action) {
-    if (!selectedEmployee || isProcessing) return;
+function showTimePicker(action) {
+    if (!selectedEmployee) return;
+    pendingClockAction = action;
+    populateTimePicker();
+    timePickerSection.classList.remove("hidden");
+    btnClockIn.disabled = true;
+    btnClockOut.disabled = true;
+    btnAbsent.disabled = true;
+}
 
+function populateTimePicker() {
+    timePicker.innerHTML = "";
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    // Calculate floor (for IN) and ceiling (for OUT) times
+    const flooredMinute = Math.floor(currentMinute / 15) * 15;
+    const ceiledMinute = Math.ceil(currentMinute / 15) * 15;
+    
+    // Select the appropriate default based on action
+    let defaultMinute = flooredMinute;
+    let defaultHour = currentHour;
+    
+    if (pendingClockAction === "OUT") {
+        defaultMinute = ceiledMinute;
+        // Handle hour overflow if ceiling pushed minute to 60
+        if (defaultMinute === 60) {
+            defaultMinute = 0;
+            defaultHour = currentHour + 1;
+        }
+    }
+    
+    const defaultTimeString = `${String(defaultHour).padStart(2, "0")}:${String(defaultMinute).padStart(2, "0")}`;
+
+    // Generate times from 9 AM to 8 PM (09:00 to 20:00)
+    for (let hour = 9; hour <= 20; hour++) {
+        for (let minute = 0; minute < 60; minute += 15) {
+            const timeStr = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+            const option = document.createElement("option");
+            option.value = timeStr;
+            option.textContent = timeStr;
+            if (timeStr === defaultTimeString) {
+                option.selected = true;
+            }
+            timePicker.appendChild(option);
+        }
+    }
+}
+
+async function submitTimeSelection() {
+    if (!pendingClockAction || !selectedEmployee || isProcessing) return;
+
+    const selectedTime = timePicker.value;
     isProcessing = true;
     btnClockIn.disabled = true;
     btnClockOut.disabled = true;
     btnAbsent.disabled = true;
     loadingState.classList.remove("hidden");
     confirmationMessage.classList.add("hidden");
+    timePickerSection.classList.add("hidden");
 
     try {
         const now = new Date();
         const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         const day = String(now.getDate());
-        const timeString = formatTime(now);
+        const timeString = selectedTime; // Use selected time instead of current time
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
+        const action = pendingClockAction;
 
         const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
@@ -357,6 +415,9 @@ async function handleClockAction(action) {
             isProcessing = false;
             btnClockIn.disabled = false;
             btnClockOut.disabled = false;
+            btnAbsent.disabled = false;
+            timePickerSection.classList.remove("hidden");
+            pendingClockAction = null;
             return;
         }
 
@@ -381,7 +442,7 @@ async function handleClockAction(action) {
         );
 
         const actionText = action === "IN" ? "Checked in" : "Checked out";
-        confirmationText.textContent = `${selectedEmployee.name} - ${actionText} at ${formatTimestamp(now)}`;
+        confirmationText.textContent = `${selectedEmployee.name} - ${actionText} at ${timeString}`;
         confirmationMessage.classList.remove("hidden");
         loadingState.classList.add("hidden");
 
@@ -391,6 +452,7 @@ async function handleClockAction(action) {
         }, 3000);
 
         showToast(`✓ ${actionText} successfully`);
+        pendingClockAction = null;
     } catch (error) {
         console.error("Error during clock action:", error);
         loadingState.classList.add("hidden");
@@ -399,6 +461,8 @@ async function handleClockAction(action) {
         btnClockIn.disabled = false;
         btnClockOut.disabled = false;
         btnAbsent.disabled = false;
+        timePickerSection.classList.remove("hidden");
+        pendingClockAction = null;
     }
 }
 
@@ -545,9 +609,11 @@ function closeAttendanceModal() {
     selectedEmployee = null;
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
+    timePickerSection.classList.add("hidden");
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
+    pendingClockAction = null;
 }
 
 function openAddEmployeeModal() {
@@ -568,11 +634,12 @@ function closeAddEmployeeModal() {
 // EVENT LISTENERS
 // ========================================================
 function setupEventListeners() {
-    btnClockIn.addEventListener("click", () => handleClockAction("IN"));
-    btnClockOut.addEventListener("click", () => handleClockAction("OUT"));
+    btnClockIn.addEventListener("click", () => showTimePicker("IN"));
+    btnClockOut.addEventListener("click", () => showTimePicker("OUT"));
     btnAbsent.addEventListener("click", handleAbsentAction);
     modalClose.addEventListener("click", closeAttendanceModal);
     modalOverlay.addEventListener("click", closeAttendanceModal);
+    btnTimeSubmit.addEventListener("click", submitTimeSelection);
 
     addEmployeeBtn.addEventListener("click", openAddEmployeeModal);
     addEmployeeClose.addEventListener("click", closeAddEmployeeModal);

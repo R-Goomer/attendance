@@ -524,7 +524,7 @@ input, textarea {
 /* Modal Actions */
 .modal-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: calc(var(--spacing-unit) * 2);
     margin-top: calc(var(--spacing-unit) * 2);
 }
@@ -567,6 +567,57 @@ input, textarea {
     color: var(--text-primary);
     font-weight: 500;
     text-align: center;
+}
+
+/* Time Picker Section */
+.time-picker-section {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing-unit) * 1.5);
+    padding: calc(var(--spacing-unit) * 2);
+    background: #f8f9fa;
+    border-radius: calc(var(--border-radius) / 2);
+    border: 1px solid var(--border-color);
+}
+
+.time-picker-section.hidden {
+    display: none;
+}
+
+.time-picker-section label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.time-picker-controls {
+    display: flex;
+    gap: calc(var(--spacing-unit));
+    align-items: center;
+}
+
+.time-select {
+    flex: 1;
+    padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1);
+    border: 1px solid var(--border-color);
+    border-radius: calc(var(--border-radius) / 2);
+    font-size: 1rem;
+    background: white;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.time-select:hover,
+.time-select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.time-picker-controls .btn {
+    padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 2);
+    font-size: 0.95rem;
 }
 
 /* Loading State */
