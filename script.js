@@ -26,6 +26,11 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
+// Work schedule (hours expected per day)
+const WORK_START = "09:00"; // not used directly but informative
+const WORK_END = "17:30"; // not used directly but informative
+const EXPECTED_WORK_MINUTES = 8.5 * 60; // 8 hours 30 minutes
+
 // ========================================================
 // STATE MANAGEMENT
 // ========================================================
@@ -174,11 +179,13 @@ async function downloadAttendanceForMonth() {
                 let missedValue = "";
 
                 if (dayRecord) {
+                    // Explicit Absent recorded in attendance
                     if (dayRecord.Status === "A") {
+                        inValue = "Absent";
+                        outValue = "Absent";
+                        missedValue = "00:00"; // absent hours counted separately for salary
                         if (!isSunday) {
-                            missedValue = "08:00";
                             totals[idx].absent += 1;
-                            totals[idx].missedMinutes += 8 * 60;
                         }
                     } else {
                         inValue = dayRecord.in || "";
@@ -187,23 +194,50 @@ async function downloadAttendanceForMonth() {
                             totals[idx].present += 1;
                         }
 
-                        const hours = Number(dayRecord.hours || 0);
-                        if (!outValue && !isSunday) {
-                            missedValue = "08:00";
-                            totals[idx].missedMinutes += 8 * 60;
-                        } else if (hours < 8) {
-                            const missed = Math.round((8 - hours) * 60);
-                            if (missed > 0) {
-                                missedValue = formatMinutes(missed);
-                                totals[idx].missedMinutes += missed;
+                        const workedHours = Number(dayRecord.hours || 0);
+                        const workedMinutes = Math.round(workedHours * 60);
+
+                        if (!outValue) {
+                            // OUT missing
+                            if (isSunday) {
+                                inValue = inValue || "Sunday";
+                                outValue = outValue || "Sunday";
+                                missedValue = "00:00";
+                            } else {
+                                // count missed minutes as remaining expected minutes
+                                const missed = Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+                                if (missed > 0) {
+                                    missedValue = formatMinutes(missed);
+                                    totals[idx].missedMinutes += missed;
+                                }
+                            }
+                        } else {
+                            // Both IN and OUT present: compute shortfall from expected
+                            if (isSunday) {
+                                // If recorded on Sunday, treat as Sunday label
+                                if (!inValue) inValue = "Sunday";
+                                if (!outValue) outValue = "Sunday";
+                                missedValue = "00:00";
+                            } else {
+                                const missed = Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+                                if (missed > 0) {
+                                    missedValue = formatMinutes(missed);
+                                    totals[idx].missedMinutes += missed;
+                                }
                             }
                         }
                     }
                 } else {
-                    if (!isSunday) {
-                        missedValue = "08:00";
+                    // No record for the day
+                    if (isSunday) {
+                        inValue = "Sunday";
+                        outValue = "Sunday";
+                        missedValue = "00:00";
+                    } else {
+                        inValue = "Absent";
+                        outValue = "Absent";
+                        missedValue = "00:00"; // absent missed hours set to 0 per request
                         totals[idx].absent += 1;
-                        totals[idx].missedMinutes += 8 * 60;
                     }
                 }
 
@@ -585,9 +619,10 @@ function computeHours(inTime, outTime) {
     const outDate = new Date();
     outDate.setHours(outHour, outMinute, 0, 0);
 
-    let diff = (outDate - inDate) / (1000 * 60 * 60);
-    if (diff < 0) diff += 24;
-    return Math.round(diff * 10) / 10;
+    // compute precise difference in hours (floating) without coarse rounding
+    let diffHours = (outDate - inDate) / (1000 * 60 * 60);
+    if (diffHours < 0) diffHours += 24;
+    return diffHours;
 }
 
 async function handleAbsentAction() {
