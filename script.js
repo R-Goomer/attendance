@@ -71,11 +71,17 @@ const addEmployeeMessageText = document.getElementById("addEmployeeMessageText")
 const timePickerSection = document.getElementById("timePickerSection");
 const timePicker = document.getElementById("timePicker");
 const btnTimeSubmit = document.getElementById("btnTimeSubmit");
+const editPrompt = document.getElementById("editPrompt");
+const editPromptText = document.getElementById("editPromptText");
+const btnEditYes = document.getElementById("btnEditYes");
+const btnEditNo = document.getElementById("btnEditNo");
 
 const toastNotification = document.getElementById("toastNotification");
 const toastMessage = document.getElementById("toastMessage");
 
 let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
+let editExistingTime = null;
+let editExistingAction = null;
 
 // ========================================================
 // INITIALIZATION
@@ -335,24 +341,111 @@ async function loadEmployees() {
     renderEmployees();
 }
 
-function showTimePicker(action) {
+async function showTimePicker(action) {
     if (!selectedEmployee) return;
-    pendingClockAction = action;
+
+    // Check today's attendance to avoid duplicate check-ins/outs
+    try {
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const day = String(now.getDate());
+        const attendanceDocId = `${selectedEmployee.id}_${month}`;
+        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceSnap = await getDoc(attendanceRef);
+        const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
+        const dayRecord = storedAttendance[day] || null;
+
+        // If user already checked IN and clicked IN, show in-UI edit prompt
+        if (action === "IN" && dayRecord?.in) {
+            editExistingTime = dayRecord.in;
+            editExistingAction = "IN";
+            editPromptText.textContent = `Already checked IN at ${dayRecord.in}. Do you want to edit check-in time?`;
+            editPrompt.classList.remove("hidden");
+            return;
+        }
+
+        // If user already checked OUT and clicked OUT, show in-UI edit prompt
+        if (action === "OUT" && dayRecord?.out) {
+            editExistingTime = dayRecord.out;
+            editExistingAction = "OUT";
+            editPromptText.textContent = `Already checked OUT at ${dayRecord.out}. Do you want to edit check-out time?`;
+            editPrompt.classList.remove("hidden");
+            return;
+        }
+
+        // Proceed to show picker (either new entry or editing)
+        pendingClockAction = action;
+        populateTimePicker();
+
+        // If editing, default to existing recorded time when present in options
+        if (action === "IN" && dayRecord?.in) {
+            if (Array.from(timePicker.options).some((o) => o.value === dayRecord.in)) {
+                timePicker.value = dayRecord.in;
+            }
+        }
+        if (action === "OUT" && dayRecord?.out) {
+            if (Array.from(timePicker.options).some((o) => o.value === dayRecord.out)) {
+                timePicker.value = dayRecord.out;
+            }
+        }
+
+        timePickerSection.classList.remove("hidden");
+
+        // Grey out other buttons based on action
+        if (action === "IN") {
+            btnClockOut.classList.add("disabled-btn");
+            btnAbsent.classList.add("disabled-btn");
+            btnClockOut.disabled = true;
+            btnAbsent.disabled = true;
+        } else if (action === "OUT") {
+            btnClockIn.classList.add("disabled-btn");
+            btnAbsent.classList.add("disabled-btn");
+            btnClockIn.disabled = true;
+            btnAbsent.disabled = true;
+        }
+    } catch (err) {
+        console.error("Error checking attendance for edit prompt:", err);
+        // fallback: open picker as before
+        pendingClockAction = action;
+        populateTimePicker();
+        timePickerSection.classList.remove("hidden");
+    }
+}
+
+function handleEditYes() {
+    // User chose to edit existing time — open picker and default to existing time
+    editPrompt.classList.add("hidden");
+    if (!editExistingAction) return;
+    pendingClockAction = editExistingAction;
     populateTimePicker();
+    if (editExistingTime && Array.from(timePicker.options).some((o) => o.value === editExistingTime)) {
+        timePicker.value = editExistingTime;
+    }
     timePickerSection.classList.remove("hidden");
-    
-    // Grey out other buttons based on action
-    if (action === "IN") {
+
+    // Grey out other buttons
+    if (pendingClockAction === "IN") {
         btnClockOut.classList.add("disabled-btn");
         btnAbsent.classList.add("disabled-btn");
         btnClockOut.disabled = true;
         btnAbsent.disabled = true;
-    } else if (action === "OUT") {
+    } else if (pendingClockAction === "OUT") {
         btnClockIn.classList.add("disabled-btn");
         btnAbsent.classList.add("disabled-btn");
         btnClockIn.disabled = true;
         btnAbsent.disabled = true;
     }
+
+    // clear temporary store
+    editExistingTime = null;
+    editExistingAction = null;
+}
+
+function handleEditNo() {
+    editPrompt.classList.add("hidden");
+    editExistingTime = null;
+    editExistingAction = null;
+    pendingClockAction = null;
 }
 
 function populateTimePicker() {
@@ -626,6 +719,7 @@ function closeAttendanceModal() {
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
     timePickerSection.classList.add("hidden");
+    editPrompt.classList.add("hidden");
     // Remove greying and re-enable all buttons
     btnClockIn.classList.remove("disabled-btn");
     btnClockOut.classList.remove("disabled-btn");
@@ -634,6 +728,8 @@ function closeAttendanceModal() {
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
     pendingClockAction = null;
+    editExistingTime = null;
+    editExistingAction = null;
 }
 
 function openAddEmployeeModal() {
@@ -660,6 +756,8 @@ function setupEventListeners() {
     modalClose.addEventListener("click", closeAttendanceModal);
     modalOverlay.addEventListener("click", closeAttendanceModal);
     btnTimeSubmit.addEventListener("click", submitTimeSelection);
+    btnEditYes.addEventListener("click", handleEditYes);
+    btnEditNo.addEventListener("click", handleEditNo);
 
     addEmployeeBtn.addEventListener("click", openAddEmployeeModal);
     addEmployeeClose.addEventListener("click", closeAddEmployeeModal);

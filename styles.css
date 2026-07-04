@@ -633,6 +633,24 @@ input, textarea {
     font-size: 0.95rem;
 }
 
+/* Edit prompt styling */
+.edit-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing-unit));
+    padding: calc(var(--spacing-unit) * 1.25);
+    background: #fff8e6;
+    border: 1px solid #f0dca1;
+    border-radius: calc(var(--border-radius) / 2);
+    align-items: center;
+}
+
+.edit-prompt.hidden { display: none; }
+
+.edit-prompt p { font-weight: 600; color: #7a5b00; }
+
+.edit-prompt-actions { display:flex; gap: calc(var(--spacing-unit)); }
+
 /* Loading State */
 .loading-state {
     display: flex;
