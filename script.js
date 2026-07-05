@@ -11,6 +11,13 @@ import {
     where,
     deleteField,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import {
+    getAuth,
+    signInWithPopup,
+    GoogleAuthProvider,
+    onAuthStateChanged,
+    signOut,
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 
 // ========================================================
 // FIREBASE CONFIGURATION
@@ -26,6 +33,8 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
 
 // Work schedule (hours expected per day)
 const WORK_START = "09:00"; // not used directly but informative
@@ -38,9 +47,33 @@ const EXPECTED_WORK_MINUTES = 8.5 * 60; // 8 hours 30 minutes
 let employees = [];
 let selectedEmployee = null;
 let isProcessing = false;
+let currentUser = null;       // Firebase Auth user
+let companyData = null;       // { companyName, logoUrl, email, ... }
 
 // ========================================================
-// DOM ELEMENTS
+// DOM ELEMENTS — AUTH
+// ========================================================
+const authScreen = document.getElementById("authScreen");
+const googleSignInBtn = document.getElementById("googleSignInBtn");
+const authLoading = document.getElementById("authLoading");
+const authError = document.getElementById("authError");
+const authErrorText = document.getElementById("authErrorText");
+
+const companySetupScreen = document.getElementById("companySetupScreen");
+const companySetupForm = document.getElementById("companySetupForm");
+const companyNameInput = document.getElementById("companyNameInput");
+const companyLogoInput = document.getElementById("companyLogoInput");
+const logoPreviewContainer = document.getElementById("logoPreviewContainer");
+const logoPreview = document.getElementById("logoPreview");
+const setupLoading = document.getElementById("setupLoading");
+
+const appContainer = document.getElementById("appContainer");
+const companyLogoDisplay = document.getElementById("companyLogoDisplay");
+const companyNameDisplay = document.getElementById("companyNameDisplay");
+const signOutBtn = document.getElementById("signOutBtn");
+
+// ========================================================
+// DOM ELEMENTS — APP
 // ========================================================
 const clockDisplay = document.getElementById("clock");
 const employeesGrid = document.getElementById("employeesGrid");
@@ -90,10 +123,226 @@ let editExistingTime = null;
 let editExistingAction = null;
 
 // ========================================================
+// HELPER — Firestore paths scoped to current user
+// ========================================================
+function companyDocRef() {
+    return doc(db, "companies", currentUser.uid);
+}
+
+function employeesCollectionRef() {
+    return collection(db, "companies", currentUser.uid, "employees");
+}
+
+function employeeDocRef(employeeId) {
+    return doc(db, "companies", currentUser.uid, "employees", employeeId);
+}
+
+function attendanceCardsCollectionRef() {
+    return collection(db, "companies", currentUser.uid, "attendanceCards");
+}
+
+function attendanceCardDocRef(cardId) {
+    return doc(db, "companies", currentUser.uid, "attendanceCards", cardId);
+}
+
+// ========================================================
+// AUTH FLOW
+// ========================================================
+function setupAuthListeners() {
+    // Google Sign In button
+    googleSignInBtn.addEventListener("click", handleGoogleSignIn);
+
+    // Company setup form
+    companySetupForm.addEventListener("submit", handleCompanySetup);
+
+    // Logo URL preview
+    companyLogoInput.addEventListener("input", handleLogoPreview);
+
+    // Sign out
+    signOutBtn.addEventListener("click", handleSignOut);
+
+    // Listen for auth state changes
+    onAuthStateChanged(auth, handleAuthStateChanged);
+}
+
+async function handleGoogleSignIn() {
+    googleSignInBtn.style.display = "none";
+    authLoading.classList.remove("hidden");
+    authError.classList.add("hidden");
+
+    try {
+        await signInWithPopup(auth, googleProvider);
+        // onAuthStateChanged will handle the rest
+    } catch (error) {
+        console.error("Google Sign-In error:", error);
+        googleSignInBtn.style.display = "flex";
+        authLoading.classList.add("hidden");
+
+        let errorMsg = "Sign-in failed. Please try again.";
+        if (error.code === "auth/popup-closed-by-user") {
+            errorMsg = "Sign-in popup was closed. Please try again.";
+        } else if (error.code === "auth/unauthorized-domain") {
+            errorMsg = "This domain is not authorized. Please add it to Firebase Console.";
+        }
+
+        authErrorText.textContent = errorMsg;
+        authError.classList.remove("hidden");
+    }
+}
+
+async function handleAuthStateChanged(user) {
+    if (user) {
+        currentUser = user;
+        // Check if company profile exists
+        try {
+            const companyDoc = await getDoc(companyDocRef());
+            if (companyDoc.exists()) {
+                // Returning user — load company data and go to app
+                companyData = companyDoc.data();
+                showApp();
+            } else {
+                // First time — show company setup
+                showCompanySetup();
+            }
+        } catch (error) {
+            console.error("Error checking company profile:", error);
+            showToast("❌ Error loading profile. Please try again.");
+            showAuthScreen();
+        }
+    } else {
+        // Signed out
+        currentUser = null;
+        companyData = null;
+        showAuthScreen();
+    }
+}
+
+async function handleCompanySetup(event) {
+    event.preventDefault();
+
+    const companyName = companyNameInput.value.trim();
+    const logoUrl = companyLogoInput.value.trim();
+
+    if (!companyName) {
+        showToast("❌ Company name is required.");
+        return;
+    }
+
+    companySetupForm.style.display = "none";
+    setupLoading.classList.remove("hidden");
+
+    try {
+        // Create company document
+        const data = {
+            companyName,
+            logoUrl: logoUrl || "",
+            email: currentUser.email || "",
+            displayName: currentUser.displayName || "",
+            createdAt: new Date().toISOString(),
+        };
+
+        await setDoc(companyDocRef(), data);
+
+        // Create default employees
+        const defaultEmployees = [
+            { id: "employee1", name: "Employee 1", jobTitle: "Team Member" },
+            { id: "employee2", name: "Employee 2", jobTitle: "Team Member" },
+        ];
+
+        for (const emp of defaultEmployees) {
+            await setDoc(employeeDocRef(emp.id), {
+                name: emp.name,
+                jobTitle: emp.jobTitle,
+            });
+        }
+
+        companyData = data;
+        showApp();
+    } catch (error) {
+        console.error("Error setting up company:", error);
+        companySetupForm.style.display = "flex";
+        setupLoading.classList.add("hidden");
+        showToast("❌ Error creating company profile. Please try again.");
+    }
+}
+
+function handleLogoPreview() {
+    const url = companyLogoInput.value.trim();
+    if (url) {
+        logoPreview.src = url;
+        logoPreviewContainer.classList.remove("hidden");
+
+        logoPreview.onerror = () => {
+            logoPreviewContainer.classList.add("hidden");
+        };
+    } else {
+        logoPreviewContainer.classList.add("hidden");
+    }
+}
+
+async function handleSignOut() {
+    try {
+        await signOut(auth);
+        // onAuthStateChanged will handle showing the auth screen
+    } catch (error) {
+        console.error("Sign out error:", error);
+        showToast("❌ Error signing out. Please try again.");
+    }
+}
+
+// ========================================================
+// SCREEN MANAGEMENT
+// ========================================================
+function showAuthScreen() {
+    authScreen.classList.remove("hidden");
+    companySetupScreen.classList.add("hidden");
+    appContainer.classList.add("hidden");
+
+    // Reset auth UI
+    googleSignInBtn.style.display = "flex";
+    authLoading.classList.add("hidden");
+    authError.classList.add("hidden");
+}
+
+function showCompanySetup() {
+    authScreen.classList.add("hidden");
+    companySetupScreen.classList.remove("hidden");
+    appContainer.classList.add("hidden");
+
+    // Reset setup form
+    companyNameInput.value = "";
+    companyLogoInput.value = "";
+    logoPreviewContainer.classList.add("hidden");
+    companySetupForm.style.display = "flex";
+    setupLoading.classList.add("hidden");
+}
+
+function showApp() {
+    authScreen.classList.add("hidden");
+    companySetupScreen.classList.add("hidden");
+    appContainer.classList.remove("hidden");
+
+    // Update header branding
+    if (companyData) {
+        companyNameDisplay.textContent = companyData.companyName || "My Company";
+        if (companyData.logoUrl) {
+            companyLogoDisplay.src = companyData.logoUrl;
+            companyLogoDisplay.alt = companyData.companyName || "Company Logo";
+            companyLogoDisplay.style.display = "block";
+        } else {
+            companyLogoDisplay.style.display = "none";
+        }
+    }
+
+    // Initialize the main app
+    setupApp();
+}
+
+// ========================================================
 // INITIALIZATION
 // ========================================================
 document.addEventListener("DOMContentLoaded", () => {
-    setupApp();
+    setupAuthListeners();
 });
 
 function setupApp() {
@@ -105,6 +354,10 @@ function setupApp() {
 }
 
 function populateMonthYearSelectors() {
+    // Clear existing options to prevent duplicates on re-init
+    selectYear.innerHTML = "";
+    selectMonth.innerHTML = "";
+
     const now = new Date();
     const currentYear = now.getFullYear();
     const startYear = currentYear - 2;
@@ -143,7 +396,7 @@ async function downloadAttendanceForMonth() {
 
     const monthKey = `${selectedYear}-${selectedMonth}`;
     try {
-        const employeesSnapshot = await getDocs(collection(db, "employees"));
+        const employeesSnapshot = await getDocs(employeesCollectionRef());
         const employeesList = employeesSnapshot.docs.map((docItem) => ({
             id: docItem.id,
             ...docItem.data(),
@@ -157,7 +410,7 @@ async function downloadAttendanceForMonth() {
         employeesList.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
         const attendanceQuery = query(
-            collection(db, "attendanceCards"),
+            attendanceCardsCollectionRef(),
             where("month", "==", monthKey)
         );
         const attendanceSnapshot = await getDocs(attendanceQuery);
@@ -318,11 +571,11 @@ function updateClock() {
 }
 
 // ========================================================
-// FIRESTORE OPERATIONS
+// FIRESTORE OPERATIONS (namespaced under companies/{uid})
 // ========================================================
 async function loadEmployees() {
     try {
-        const querySnapshot = await getDocs(collection(db, "employees"));
+        const querySnapshot = await getDocs(employeesCollectionRef());
         employees = querySnapshot.docs.map((docItem) => ({
             id: docItem.id,
             ...docItem.data(),
@@ -331,16 +584,16 @@ async function loadEmployees() {
 
         if (employees.length === 0) {
             employees = [
-                { id: "rushil", name: "Rushil Goomer", jobTitle: "Developer" },
-                { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
+                { id: "employee1", name: "Employee 1", jobTitle: "Team Member" },
+                { id: "employee2", name: "Employee 2", jobTitle: "Team Member" },
             ];
         }
     } catch (error) {
         console.error("Error loading employees from Firebase:", error);
         showToast("❌ Firebase load failed. Please check your configuration.");
         employees = [
-            { id: "rushil", name: "Rushil Goomer", jobTitle: "Developer" },
-            { id: "jane", name: "Jane Doe", jobTitle: "Designer" },
+            { id: "employee1", name: "Employee 1", jobTitle: "Team Member" },
+            { id: "employee2", name: "Employee 2", jobTitle: "Team Member" },
         ];
     }
 
@@ -356,7 +609,7 @@ async function showTimePicker(action) {
         const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         const day = String(now.getDate());
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
-        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceRef = attendanceCardDocRef(attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
         const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
         const dayRecord = storedAttendance[day] || null;
@@ -514,7 +767,7 @@ async function submitTimeSelection() {
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
         const action = pendingClockAction;
 
-        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceRef = attendanceCardDocRef(attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
         const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
         const dayRecord = { ...(storedAttendance[day] || {}) };
@@ -600,7 +853,7 @@ async function handleAddEmployee(event) {
     addEmployeeForm.parentElement.appendChild(spinner);
 
     try {
-        const employeeRef = doc(db, "employees", employeeId);
+        const employeeRef = employeeDocRef(employeeId);
         const existing = await getDoc(employeeRef);
         if (existing.exists()) {
             spinner.remove();
@@ -635,7 +888,7 @@ async function deleteEmployee(employee) {
     }
 
     try {
-        await deleteDoc(doc(db, "employees", employee.id));
+        await deleteDoc(employeeDocRef(employee.id));
         employees = employees.filter((current) => current.id !== employee.id);
         renderEmployees();
         showToast(`✓ Employee ${employee.name} deleted`);
@@ -842,7 +1095,7 @@ async function handleAbsentAction() {
         const day = String(now.getDate());
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
 
-        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceRef = attendanceCardDocRef(attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
         const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
         const dayRecord = storedAttendance[day] || null;
@@ -905,7 +1158,7 @@ async function handleAbsentWarningYes() {
         const day = String(now.getDate());
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
 
-        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+        const attendanceRef = attendanceCardDocRef(attendanceDocId);
 
         // Delete checking times from Firebase and set Status to 'A'
         await setDoc(
