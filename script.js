@@ -459,15 +459,15 @@ function populateTimePicker() {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    
+
     // Calculate floor (for IN) and ceiling (for OUT) times
     const flooredMinute = Math.floor(currentMinute / 15) * 15;
     const ceiledMinute = Math.ceil(currentMinute / 15) * 15;
-    
+
     // Select the appropriate default based on action
     let defaultMinute = flooredMinute;
     let defaultHour = currentHour;
-    
+
     if (pendingClockAction === "OUT") {
         defaultMinute = ceiledMinute;
         // Handle hour overflow if ceiling pushed minute to 60
@@ -476,7 +476,7 @@ function populateTimePicker() {
             defaultHour = currentHour + 1;
         }
     }
-    
+
     const defaultTimeString = `${String(defaultHour).padStart(2, "0")}:${String(defaultMinute).padStart(2, "0")}`;
 
     // Generate times from 9 AM to 8 PM (09:00 to 20:00)
@@ -952,7 +952,7 @@ async function handleAbsentWarningYes() {
 
 function handleAbsentWarningNo() {
     absentWarningPrompt.classList.add("hidden");
-    
+
     // Enable buttons and remove grey out styling
     btnClockIn.classList.remove("disabled-btn");
     btnClockOut.classList.remove("disabled-btn");
@@ -960,7 +960,7 @@ function handleAbsentWarningNo() {
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
-    
+
     isProcessing = false;
     pendingClockAction = null;
 }
