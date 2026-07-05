@@ -17,6 +17,8 @@ import {
     GoogleAuthProvider,
     onAuthStateChanged,
     signOut,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 
 // ========================================================
@@ -58,6 +60,17 @@ const googleSignInBtn = document.getElementById("googleSignInBtn");
 const authLoading = document.getElementById("authLoading");
 const authError = document.getElementById("authError");
 const authErrorText = document.getElementById("authErrorText");
+
+// Email/Password auth elements
+const tabLogin = document.getElementById("tabLogin");
+const tabSignup = document.getElementById("tabSignup");
+const emailAuthForm = document.getElementById("emailAuthForm");
+const emailInput = document.getElementById("emailInput");
+const passwordInput = document.getElementById("passwordInput");
+const emailAuthBtnText = document.getElementById("emailAuthBtnText");
+const togglePassword = document.getElementById("togglePassword");
+const eyeIcon = document.getElementById("eyeIcon");
+let emailAuthMode = "login"; // 'login' | 'signup'
 
 const companySetupScreen = document.getElementById("companySetupScreen");
 const companySetupForm = document.getElementById("companySetupForm");
@@ -152,6 +165,22 @@ function setupAuthListeners() {
     // Google Sign In button
     googleSignInBtn.addEventListener("click", handleGoogleSignIn);
 
+    // Email/Password tabs
+    tabLogin.addEventListener("click", () => switchAuthTab("login"));
+    tabSignup.addEventListener("click", () => switchAuthTab("signup"));
+
+    // Email/Password form submit
+    emailAuthForm.addEventListener("submit", handleEmailAuth);
+
+    // Password visibility toggle
+    togglePassword.addEventListener("click", () => {
+        const isHidden = passwordInput.type === "password";
+        passwordInput.type = isHidden ? "text" : "password";
+        eyeIcon.innerHTML = isHidden
+            ? `<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`
+            : `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    });
+
     // Company setup form
     companySetupForm.addEventListener("submit", handleCompanySetup);
 
@@ -163,6 +192,64 @@ function setupAuthListeners() {
 
     // Listen for auth state changes
     onAuthStateChanged(auth, handleAuthStateChanged);
+}
+
+function switchAuthTab(mode) {
+    emailAuthMode = mode;
+    tabLogin.classList.toggle("active", mode === "login");
+    tabSignup.classList.toggle("active", mode === "signup");
+    emailAuthBtnText.textContent = mode === "login" ? "Login" : "Create Account";
+    passwordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
+    // Clear fields & errors when switching
+    emailInput.value = "";
+    passwordInput.value = "";
+    authError.classList.add("hidden");
+}
+
+async function handleEmailAuth(event) {
+    event.preventDefault();
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        authErrorText.textContent = "Please enter your email and password.";
+        authError.classList.remove("hidden");
+        return;
+    }
+
+    // Show loading
+    emailAuthForm.style.display = "none";
+    googleSignInBtn.style.display = "none";
+    authLoading.classList.remove("hidden");
+    authError.classList.add("hidden");
+
+    try {
+        if (emailAuthMode === "login") {
+            await signInWithEmailAndPassword(auth, email, password);
+        } else {
+            await createUserWithEmailAndPassword(auth, email, password);
+        }
+        // onAuthStateChanged will handle navigation
+    } catch (error) {
+        console.error("Email auth error:", error);
+        emailAuthForm.style.display = "flex";
+        googleSignInBtn.style.display = "flex";
+        authLoading.classList.add("hidden");
+
+        const errorMessages = {
+            "auth/user-not-found": "No account found with this email.",
+            "auth/wrong-password": "Incorrect password. Please try again.",
+            "auth/invalid-credential": "Invalid email or password. Please try again.",
+            "auth/email-already-in-use": "An account with this email already exists.",
+            "auth/weak-password": "Password should be at least 6 characters.",
+            "auth/invalid-email": "Please enter a valid email address.",
+            "auth/too-many-requests": "Too many failed attempts. Please try again later.",
+        };
+
+        authErrorText.textContent = errorMessages[error.code] || "Authentication failed. Please try again.";
+        authError.classList.remove("hidden");
+    }
 }
 
 async function handleGoogleSignIn() {
@@ -299,9 +386,13 @@ function showAuthScreen() {
     appContainer.classList.add("hidden");
 
     // Reset auth UI
+    emailAuthForm.style.display = "flex";
     googleSignInBtn.style.display = "flex";
     authLoading.classList.add("hidden");
     authError.classList.add("hidden");
+    emailInput.value = "";
+    passwordInput.value = "";
+    switchAuthTab("login");
 }
 
 function showCompanySetup() {
