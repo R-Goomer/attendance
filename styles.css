@@ -651,6 +651,44 @@ input, textarea {
 
 .edit-prompt-actions { display:flex; gap: calc(var(--spacing-unit)); }
 
+/* Absent warning prompt styling */
+.absent-warning-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing-unit));
+    padding: calc(var(--spacing-unit) * 1.25);
+    background: #fdf2f2;
+    border: 1px solid #f8b4b4;
+    border-radius: calc(var(--border-radius) / 2);
+    align-items: center;
+    margin-top: calc(var(--spacing-unit) * 1.5);
+    transition: all 0.3s ease;
+}
+
+.absent-warning-prompt.hidden { display: none; }
+
+.absent-warning-prompt p { 
+    font-weight: 600; 
+    color: #9b1c1c; 
+    text-align: center;
+    margin: 0;
+}
+
+.absent-warning-actions { 
+    display: flex; 
+    gap: calc(var(--spacing-unit)); 
+}
+
+.btn-danger {
+    background-color: #e02424;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c81e1e;
+}
+
+
 /* Loading State */
 .loading-state {
     display: flex;

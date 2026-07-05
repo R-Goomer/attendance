@@ -9,6 +9,7 @@ import {
     deleteDoc,
     query,
     where,
+    deleteField,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 // ========================================================
@@ -75,6 +76,11 @@ const editPrompt = document.getElementById("editPrompt");
 const editPromptText = document.getElementById("editPromptText");
 const btnEditYes = document.getElementById("btnEditYes");
 const btnEditNo = document.getElementById("btnEditNo");
+
+const absentWarningPrompt = document.getElementById("absentWarningPrompt");
+const absentWarningText = document.getElementById("absentWarningText");
+const btnAbsentWarningYes = document.getElementById("btnAbsentWarningYes");
+const btnAbsentWarningNo = document.getElementById("btnAbsentWarningNo");
 
 const toastNotification = document.getElementById("toastNotification");
 const toastMessage = document.getElementById("toastMessage");
@@ -707,6 +713,7 @@ function openAttendanceModal(employee) {
     modalEmployeeRole.textContent = employee.jobTitle;
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
+    absentWarningPrompt.classList.add("hidden");
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
@@ -720,6 +727,7 @@ function closeAttendanceModal() {
     loadingState.classList.add("hidden");
     timePickerSection.classList.add("hidden");
     editPrompt.classList.add("hidden");
+    absentWarningPrompt.classList.add("hidden");
     // Remove greying and re-enable all buttons
     btnClockIn.classList.remove("disabled-btn");
     btnClockOut.classList.remove("disabled-btn");
@@ -758,6 +766,8 @@ function setupEventListeners() {
     btnTimeSubmit.addEventListener("click", submitTimeSelection);
     btnEditYes.addEventListener("click", handleEditYes);
     btnEditNo.addEventListener("click", handleEditNo);
+    btnAbsentWarningYes.addEventListener("click", handleAbsentWarningYes);
+    btnAbsentWarningNo.addEventListener("click", handleAbsentWarningNo);
 
     addEmployeeBtn.addEventListener("click", openAddEmployeeModal);
     addEmployeeClose.addEventListener("click", closeAddEmployeeModal);
@@ -815,13 +825,16 @@ async function handleAbsentAction() {
 
     isProcessing = true;
     pendingClockAction = "ABSENT";
-    // Grey out IN and OUT buttons
+    // Grey out buttons
     btnClockIn.classList.add("disabled-btn");
     btnClockOut.classList.add("disabled-btn");
     btnClockIn.disabled = true;
     btnClockOut.disabled = true;
+    btnAbsent.classList.add("disabled-btn");
+    btnAbsent.disabled = true;
     loadingState.classList.remove("hidden");
     confirmationMessage.classList.add("hidden");
+    absentWarningPrompt.classList.add("hidden");
 
     try {
         const now = new Date();
@@ -832,7 +845,17 @@ async function handleAbsentAction() {
         const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
         const storedAttendance = attendanceSnap.exists() ? attendanceSnap.data().attendance || {} : {};
+        const dayRecord = storedAttendance[day] || null;
 
+        // Check if employee has checked in
+        if (dayRecord && dayRecord.in) {
+            loadingState.classList.add("hidden");
+            absentWarningText.textContent = `${selectedEmployee.name} was marked checked IN at ${dayRecord.in}. Do you still want to mark absent?`;
+            absentWarningPrompt.classList.remove("hidden");
+            return;
+        }
+
+        // Proceed directly if no checked in times
         storedAttendance[day] = { Status: "A" };
 
         await setDoc(
@@ -862,11 +885,84 @@ async function handleAbsentAction() {
         isProcessing = false;
         btnClockIn.classList.remove("disabled-btn");
         btnClockOut.classList.remove("disabled-btn");
+        btnAbsent.classList.remove("disabled-btn");
         btnClockIn.disabled = false;
         btnClockOut.disabled = false;
         btnAbsent.disabled = false;
         pendingClockAction = null;
     }
+}
+
+async function handleAbsentWarningYes() {
+    if (!selectedEmployee || !isProcessing) return;
+
+    absentWarningPrompt.classList.add("hidden");
+    loadingState.classList.remove("hidden");
+
+    try {
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const day = String(now.getDate());
+        const attendanceDocId = `${selectedEmployee.id}_${month}`;
+
+        const attendanceRef = doc(db, "attendanceCards", attendanceDocId);
+
+        // Delete checking times from Firebase and set Status to 'A'
+        await setDoc(
+            attendanceRef,
+            {
+                employeeId: selectedEmployee.id,
+                month,
+                attendance: {
+                    [day]: {
+                        Status: "A",
+                        in: deleteField(),
+                        out: deleteField(),
+                        hours: deleteField()
+                    }
+                }
+            },
+            { merge: true }
+        );
+
+        confirmationText.textContent = `${selectedEmployee.name} - Marked absent for today`;
+        confirmationMessage.classList.remove("hidden");
+        loadingState.classList.add("hidden");
+
+        setTimeout(() => {
+            closeAttendanceModal();
+            isProcessing = false;
+        }, 3000);
+
+        showToast("✓ Absent recorded successfully");
+    } catch (error) {
+        console.error("Error confirming absent:", error);
+        loadingState.classList.add("hidden");
+        showToast("❌ Error: Could not mark absent. Check Firebase setup.");
+        isProcessing = false;
+        btnClockIn.classList.remove("disabled-btn");
+        btnClockOut.classList.remove("disabled-btn");
+        btnAbsent.classList.remove("disabled-btn");
+        btnClockIn.disabled = false;
+        btnClockOut.disabled = false;
+        btnAbsent.disabled = false;
+        pendingClockAction = null;
+    }
+}
+
+function handleAbsentWarningNo() {
+    absentWarningPrompt.classList.add("hidden");
+    
+    // Enable buttons and remove grey out styling
+    btnClockIn.classList.remove("disabled-btn");
+    btnClockOut.classList.remove("disabled-btn");
+    btnAbsent.classList.remove("disabled-btn");
+    btnClockIn.disabled = false;
+    btnClockOut.disabled = false;
+    btnAbsent.disabled = false;
+    
+    isProcessing = false;
+    pendingClockAction = null;
 }
 
 function showToast(message) {
