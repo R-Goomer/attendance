@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <!-- EmailJS SDK for OTP email sending -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
@@ -44,8 +46,8 @@
             <!-- Email / Password Form -->
             <form id="emailAuthForm" class="email-auth-form" novalidate>
                 <div class="email-form-field">
-                    <label for="emailInput">Email</label>
-                    <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" required>
+                    <label for="emailInput">Email <span class="gmail-badge">Gmail only</span></label>
+                    <input type="email" id="emailInput" placeholder="you@gmail.com" autocomplete="email" required>
                 </div>
                 <div class="email-form-field">
                     <label for="passwordInput">Password</label>
@@ -62,6 +64,8 @@
                 <button type="submit" id="emailAuthBtn" class="email-auth-submit-btn">
                     <span id="emailAuthBtnText">Login</span>
                 </button>
+                <!-- Shown only in login mode -->
+                <button type="button" id="forgotPasswordBtn" class="forgot-password-btn">Forgot Password?</button>
             </form>
 
             <!-- Divider -->
@@ -93,6 +97,78 @@
         </div>
 
         <!-- Footer for auth screen -->
+        <footer class="powered-by-footer">
+            <span>powered by <strong>GUIDANCE LABS</strong></span>
+        </footer>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- OTP VERIFICATION SCREEN                        -->
+    <!-- ============================================== -->
+    <div id="otpScreen" class="auth-screen hidden">
+        <div class="auth-bg-shapes">
+            <div class="auth-shape auth-shape-1"></div>
+            <div class="auth-shape auth-shape-2"></div>
+            <div class="auth-shape auth-shape-3"></div>
+        </div>
+
+        <div class="auth-card otp-card">
+            <div class="auth-card-header">
+                <div class="auth-logo-icon otp-logo-icon">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                        <rect width="48" height="48" rx="12" fill="url(#otp-grad)"/>
+                        <path d="M8 16h32v22H8z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+                        <path d="M8 16l16 13L40 16" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs><linearGradient id="otp-grad" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#06b6d4"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs>
+                    </svg>
+                </div>
+                <h1 class="auth-title">Verify Your Email</h1>
+                <p class="auth-subtitle" id="otpSubtitle">We sent a 6-digit code to your Gmail</p>
+            </div>
+
+            <!-- OTP digit boxes -->
+            <div class="otp-inputs" id="otpInputs">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp0" autocomplete="one-time-code">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp1">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp2">
+                <span class="otp-separator">—</span>
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp3">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp4">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp5">
+            </div>
+
+            <!-- Timer -->
+            <div class="otp-timer-row">
+                <span class="otp-timer-label">Code expires in</span>
+                <span class="otp-timer" id="otpTimer">5:00</span>
+            </div>
+
+            <!-- Verify button -->
+            <button id="otpVerifyBtn" class="otp-verify-btn">
+                <span id="otpVerifyBtnText">Verify Code</span>
+            </button>
+
+            <!-- Resend -->
+            <div class="otp-resend-row">
+                <span class="otp-resend-label">Didn't receive it?</span>
+                <button id="otpResendBtn" class="otp-resend-btn" disabled>Resend Code</button>
+            </div>
+
+            <!-- OTP error -->
+            <div id="otpError" class="auth-error hidden">
+                <p id="otpErrorText"></p>
+            </div>
+
+            <!-- OTP loading -->
+            <div id="otpLoading" class="auth-loading hidden">
+                <div class="spinner-small"></div>
+                <p>Verifying...</p>
+            </div>
+
+            <!-- Back link -->
+            <button id="otpBackBtn" class="otp-back-btn">← Back to Login</button>
+        </div>
+
         <footer class="powered-by-footer">
             <span>powered by <strong>GUIDANCE LABS</strong></span>
         </footer>
@@ -192,6 +268,15 @@
                         <line x1="21" y1="12" x2="9" y2="12"/>
                     </svg>
                     <span>Sign Out</span>
+                </button>
+                <button class="btn-delete-account" id="deleteAccountBtn" title="Delete My Account">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                    </svg>
+                    <span>Delete Account</span>
                 </button>
             </div>
         </header>
@@ -318,6 +403,68 @@
                     <div class="confirmation-icon">✓</div>
                     <p id="addEmployeeMessageText">Employee added successfully</p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div id="deleteAccountModal" class="modal hidden">
+        <div class="modal-overlay" id="deleteAccountOverlay"></div>
+        <div class="modal-content delete-account-modal-content">
+            <div class="delete-modal-header">
+                <div class="delete-warning-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <h2 class="delete-modal-title">Delete Account</h2>
+                <p class="delete-modal-subtitle">This will permanently erase your account and all data</p>
+            </div>
+
+            <div class="delete-modal-body">
+                <div class="delete-warning-list">
+                    <div class="delete-warning-item">
+                        <span class="delete-warning-dot"></span>
+                        <span>Your company profile will be deleted</span>
+                    </div>
+                    <div class="delete-warning-item">
+                        <span class="delete-warning-dot"></span>
+                        <span>All employee records will be removed</span>
+                    </div>
+                    <div class="delete-warning-item">
+                        <span class="delete-warning-dot"></span>
+                        <span>All attendance history will be erased</span>
+                    </div>
+                    <div class="delete-warning-item">
+                        <span class="delete-warning-dot"></span>
+                        <span>Your login credentials will be revoked</span>
+                    </div>
+                </div>
+
+                <!-- Password re-auth (shown for email/password users only) -->
+                <div id="deleteReauthSection" class="delete-reauth-section hidden">
+                    <label for="deleteAccountPassword" class="delete-reauth-label">Confirm with your password</label>
+                    <input type="password" id="deleteAccountPassword" class="delete-reauth-input" placeholder="Enter your password to confirm">
+                </div>
+
+                <div id="deleteAccountError" class="auth-error hidden">
+                    <p id="deleteAccountErrorText"></p>
+                </div>
+
+                <div id="deleteAccountLoading" class="auth-loading hidden">
+                    <div class="spinner-small"></div>
+                    <p>Deleting your account...</p>
+                </div>
+            </div>
+
+            <div class="delete-modal-footer">
+                <button class="btn btn-secondary" id="cancelDeleteAccount">Cancel</button>
+                <button class="btn btn-danger" id="confirmDeleteAccount">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                    </svg>
+                    Delete My Account
+                </button>
             </div>
         </div>
     </div>

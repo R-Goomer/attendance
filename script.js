@@ -19,7 +19,15 @@ import {
     signOut,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
+    deleteUser,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
+    sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import {
+    initializeAppCheck,
+    ReCaptchaV3Provider,
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app-check.js";
 
 // ========================================================
 // FIREBASE CONFIGURATION
@@ -33,7 +41,36 @@ const firebaseConfig = {
     appId: "1:30313950569:web:5d4f1a970ef12ea381a1f8",
 };
 
+// ========================================================
+// EMAILJS CONFIGURATION
+// Replace these with your actual EmailJS credentials
+// Get them from: https://www.emailjs.com → Account → API Keys
+// ========================================================
+const EMAILJS_SERVICE_ID = "service_kg2ddvv";   // e.g. "service_abc123"
+const EMAILJS_TEMPLATE_ID = "template_6lsrzk6";  // e.g. "template_xyz789"
+const EMAILJS_PUBLIC_KEY = "71UcJjRQiT9Ln2a76";   // e.g. "user_ABCDE12345"
+
+// ========================================================
+// RECAPTCHA / APP CHECK CONFIGURATION
+// Replace with your reCAPTCHA v3 Site Key from:
+// https://www.google.com/recaptcha/admin
+// ========================================================
+const RECAPTCHA_SITE_KEY = "6Lea_0UtAAAAAGB0kZV8n770Zh7xyKkoPAOTJQs4";
+
 const firebaseApp = initializeApp(firebaseConfig);
+
+// Initialize App Check with reCAPTCHA v3
+// Remove the self.FIREBASE_APPCHECK_DEBUG_TOKEN line before going to production
+if (typeof RECAPTCHA_SITE_KEY === "string" && !RECAPTCHA_SITE_KEY.startsWith("YOUR_")) {
+    // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Uncomment locally if needed
+    initializeAppCheck(firebaseApp, {
+        provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+        isTokenAutoRefreshEnabled: true,
+    });
+} else {
+    console.warn("⚠️ App Check not initialized: Set your RECAPTCHA_SITE_KEY in script.js");
+}
+
 const db = getFirestore(firebaseApp);
 const auth = getAuth(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
@@ -51,6 +88,16 @@ let selectedEmployee = null;
 let isProcessing = false;
 let currentUser = null;       // Firebase Auth user
 let companyData = null;       // { companyName, logoUrl, email, ... }
+
+// OTP State
+let pendingOtpCode = null;          // The generated OTP
+let pendingOtpEmail = null;         // The email waiting for OTP
+let pendingOtpPassword = null;      // The password for re-sign-in after OTP
+let pendingOtpIsSignup = false;     // Was this a sign-up flow?
+let otpExpiresAt = null;            // Timestamp when OTP expires
+let otpTimerInterval = null;        // setInterval handle
+let otpResendTimeout = null;        // setTimeout for resend enable
+let otpVerified = false;            // True after OTP is confirmed, prevents re-trigger on re-sign-in
 
 // ========================================================
 // DOM ELEMENTS — AUTH
@@ -71,6 +118,20 @@ const emailAuthBtnText = document.getElementById("emailAuthBtnText");
 const togglePassword = document.getElementById("togglePassword");
 const eyeIcon = document.getElementById("eyeIcon");
 let emailAuthMode = "login"; // 'login' | 'signup'
+
+// OTP Screen elements
+const otpScreen = document.getElementById("otpScreen");
+const otpSubtitle = document.getElementById("otpSubtitle");
+const otpInputs = document.getElementById("otpInputs");
+const otpDigits = Array.from({ length: 6 }, (_, i) => document.getElementById(`otp${i}`));
+const otpTimer = document.getElementById("otpTimer");
+const otpVerifyBtn = document.getElementById("otpVerifyBtn");
+const otpVerifyBtnText = document.getElementById("otpVerifyBtnText");
+const otpResendBtn = document.getElementById("otpResendBtn");
+const otpError = document.getElementById("otpError");
+const otpErrorText = document.getElementById("otpErrorText");
+const otpLoading = document.getElementById("otpLoading");
+const otpBackBtn = document.getElementById("otpBackBtn");
 
 const companySetupScreen = document.getElementById("companySetupScreen");
 const companySetupForm = document.getElementById("companySetupForm");
@@ -131,6 +192,18 @@ const btnAbsentWarningNo = document.getElementById("btnAbsentWarningNo");
 const toastNotification = document.getElementById("toastNotification");
 const toastMessage = document.getElementById("toastMessage");
 
+// Delete Account Modal elements
+const deleteAccountModal = document.getElementById("deleteAccountModal");
+const deleteAccountOverlay = document.getElementById("deleteAccountOverlay");
+const deleteAccountBtn = document.getElementById("deleteAccountBtn");
+const confirmDeleteAccountBtn = document.getElementById("confirmDeleteAccount");
+const cancelDeleteAccountBtn = document.getElementById("cancelDeleteAccount");
+const deleteAccountPassword = document.getElementById("deleteAccountPassword");
+const deleteReauthSection = document.getElementById("deleteReauthSection");
+const deleteAccountError = document.getElementById("deleteAccountError");
+const deleteAccountErrorText = document.getElementById("deleteAccountErrorText");
+const deleteAccountLoading = document.getElementById("deleteAccountLoading");
+
 let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
 let editExistingTime = null;
 let editExistingAction = null;
@@ -190,6 +263,28 @@ function setupAuthListeners() {
     // Sign out
     signOutBtn.addEventListener("click", handleSignOut);
 
+    // OTP screen listeners
+    otpVerifyBtn.addEventListener("click", handleOtpVerify);
+    otpResendBtn.addEventListener("click", handleOtpResend);
+    otpBackBtn.addEventListener("click", () => {
+        clearInterval(otpTimerInterval);
+        clearTimeout(otpResendTimeout);
+        pendingOtpEmail = null;
+        pendingOtpCode = null;
+        pendingOtpPassword = null;
+        showAuthScreen();
+    });
+    setupOtpDigitNavigation();
+
+    // Delete Account listeners
+    deleteAccountBtn.addEventListener("click", () => showDeleteAccountModal());
+    cancelDeleteAccountBtn.addEventListener("click", () => hideDeleteAccountModal());
+    deleteAccountOverlay.addEventListener("click", () => hideDeleteAccountModal());
+    confirmDeleteAccountBtn.addEventListener("click", handleDeleteAccount);
+
+    // Forgot password
+    document.getElementById("forgotPasswordBtn").addEventListener("click", handleForgotPassword);
+
     // Listen for auth state changes
     onAuthStateChanged(auth, handleAuthStateChanged);
 }
@@ -200,6 +295,9 @@ function switchAuthTab(mode) {
     tabSignup.classList.toggle("active", mode === "signup");
     emailAuthBtnText.textContent = mode === "login" ? "Login" : "Create Account";
     passwordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
+    // Show forgot password link only in login mode
+    const forgotBtn = document.getElementById("forgotPasswordBtn");
+    if (forgotBtn) forgotBtn.style.display = mode === "login" ? "block" : "none";
     // Clear fields & errors when switching
     emailInput.value = "";
     passwordInput.value = "";
@@ -218,6 +316,14 @@ async function handleEmailAuth(event) {
         return;
     }
 
+    // ── Gmail-only restriction ──────────────────────────────
+    if (!email.toLowerCase().endsWith("@gmail.com")) {
+        authErrorText.textContent = "Only @gmail.com addresses are allowed to sign up or log in.";
+        authError.classList.remove("hidden");
+        return;
+    }
+    // ───────────────────────────────────────────────────────
+
     // Show loading
     emailAuthForm.style.display = "none";
     googleSignInBtn.style.display = "none";
@@ -225,12 +331,15 @@ async function handleEmailAuth(event) {
     authError.classList.add("hidden");
 
     try {
+        // Cache password so OTP flow can re-sign-in after verification
+        pendingOtpPassword = password;
+
         if (emailAuthMode === "login") {
             await signInWithEmailAndPassword(auth, email, password);
         } else {
             await createUserWithEmailAndPassword(auth, email, password);
         }
-        // onAuthStateChanged will handle navigation
+        // onAuthStateChanged intercepts and triggers OTP flow (see handleAuthStateChanged)
     } catch (error) {
         console.error("Email auth error:", error);
         emailAuthForm.style.display = "flex";
@@ -279,16 +388,62 @@ async function handleGoogleSignIn() {
 
 async function handleAuthStateChanged(user) {
     if (user) {
+        const isGoogleUser = user.providerData.some(p => p.providerId === "google.com");
+        const isNewSignup = !isGoogleUser && emailAuthMode === "signup" && !otpVerified;
+
+        if (isNewSignup) {
+            // Write a Firestore flag BEFORE signing out — while user is still authenticated
+            // This prevents login bypass: even if user goes to login tab, the flag blocks them
+            try {
+                await setDoc(doc(db, "companies", user.uid),
+                    { needsOtpVerification: true }, { merge: true });
+            } catch (e) {
+                console.warn("Could not write OTP verification flag:", e);
+            }
+            pendingOtpEmail = user.email;
+            await signOut(auth); // triggers this handler again (user=null), guarded by pendingOtpEmail
+            await startOtpFlow(pendingOtpEmail);
+            return;
+        }
+
+        // For email/password logins, enforce that OTP was completed during signup
+        if (!isGoogleUser && !otpVerified) {
+            try {
+                const verifySnap = await getDoc(doc(db, "companies", user.uid));
+                if (verifySnap.exists() && verifySnap.data().needsOtpVerification === true) {
+                    // Account exists but OTP was never completed — block access
+                    await signOut(auth);
+                    showAuthScreen();
+                    authErrorText.textContent = "⚠️ This account has not completed email verification. Please sign up again.";
+                    authError.classList.remove("hidden");
+                    return;
+                }
+            } catch (e) {
+                // No doc yet = brand new verified user, proceed normally
+            }
+        }
+
+        // OTP was just verified — clear the Firestore flag
+        if (otpVerified) {
+            try {
+                await setDoc(doc(db, "companies", user.uid),
+                    { needsOtpVerification: false }, { merge: true });
+            } catch (e) { /* non-critical */ }
+        }
+
+        // Reset for the next signup session
+        otpVerified = false;
+
         currentUser = user;
-        // Check if company profile exists
+        // Check if company profile exists (check companyName field to distinguish from bare flag doc)
         try {
             const companyDoc = await getDoc(companyDocRef());
-            if (companyDoc.exists()) {
+            if (companyDoc.exists() && companyDoc.data().companyName) {
                 // Returning user — load company data and go to app
                 companyData = companyDoc.data();
                 showApp();
             } else {
-                // First time — show company setup
+                // First time or only flag doc present — show company setup
                 showCompanySetup();
             }
         } catch (error) {
@@ -297,11 +452,218 @@ async function handleAuthStateChanged(user) {
             showAuthScreen();
         }
     } else {
-        // Signed out
-        currentUser = null;
-        companyData = null;
+        // Signed out — only reset if we're NOT in the middle of OTP flow
+        if (!pendingOtpEmail) {
+            currentUser = null;
+            companyData = null;
+            showAuthScreen();
+        }
+    }
+}
+
+// ========================================================
+// OTP FLOW
+// ========================================================
+
+function generateOtp() {
+    // Cryptographically stronger random 6-digit OTP
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return String(arr[0] % 1000000).padStart(6, "0");
+}
+
+async function sendOtpEmail(email, otp) {
+    // Validate EmailJS is configured
+    if (EMAILJS_SERVICE_ID.startsWith("YOUR_")) {
+        // Dev fallback: log OTP to console (REMOVE IN PRODUCTION)
+        console.warn("📧 [DEV MODE] OTP for", email, "is:", otp);
+        return;
+    }
+
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: email,
+        passcode: otp,
+        app_name: "Attendance System",
+    });
+}
+
+async function startOtpFlow(email) {
+    pendingOtpCode = generateOtp();
+    otpExpiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes from now
+
+    try {
+        await sendOtpEmail(email, pendingOtpCode);
+    } catch (err) {
+        console.error("Failed to send OTP email:", err);
+        // Still show OTP screen — dev fallback shows it in console
+    }
+
+    showOtpScreen(email);
+}
+
+function showOtpScreen(email) {
+    authScreen.classList.add("hidden");
+    companySetupScreen.classList.add("hidden");
+    appContainer.classList.add("hidden");
+    otpScreen.classList.remove("hidden");
+
+    // Update subtitle
+    const maskedEmail = email.replace(/(.{2}).+(@.+)/, "$1****$2");
+    otpSubtitle.textContent = `We sent a 6-digit code to ${maskedEmail}`;
+
+    // Clear digit boxes
+    otpDigits.forEach(d => { d.value = ""; d.classList.remove("otp-digit-filled", "otp-digit-error"); });
+    otpError.classList.add("hidden");
+    otpLoading.classList.add("hidden");
+    otpVerifyBtn.disabled = false;
+    otpVerifyBtnText.textContent = "Verify Code";
+
+    // Focus first digit
+    otpDigits[0].focus();
+
+    // Start countdown timer
+    startOtpTimer();
+
+    // Enable resend after 60 seconds
+    otpResendBtn.disabled = true;
+    clearTimeout(otpResendTimeout);
+    otpResendTimeout = setTimeout(() => { otpResendBtn.disabled = false; }, 60_000);
+}
+
+function startOtpTimer() {
+    clearInterval(otpTimerInterval);
+    otpTimerInterval = setInterval(() => {
+        const remaining = otpExpiresAt - Date.now();
+        if (remaining <= 0) {
+            clearInterval(otpTimerInterval);
+            otpTimer.textContent = "0:00";
+            otpTimer.classList.add("otp-timer-expired");
+            otpVerifyBtn.disabled = true;
+            otpErrorText.textContent = "Code expired. Please request a new one.";
+            otpError.classList.remove("hidden");
+            return;
+        }
+        const m = Math.floor(remaining / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        otpTimer.textContent = `${m}:${String(s).padStart(2, "0")}`;
+        otpTimer.classList.toggle("otp-timer-warning", remaining < 60_000);
+    }, 500);
+}
+
+async function handleOtpVerify() {
+    const entered = otpDigits.map(d => d.value).join("");
+
+    if (entered.length < 6) {
+        otpErrorText.textContent = "Please enter all 6 digits.";
+        otpError.classList.remove("hidden");
+        otpDigits.forEach(d => d.classList.add("otp-digit-error"));
+        return;
+    }
+
+    if (Date.now() > otpExpiresAt) {
+        otpErrorText.textContent = "Code has expired. Please request a new one.";
+        otpError.classList.remove("hidden");
+        return;
+    }
+
+    if (entered !== pendingOtpCode) {
+        otpErrorText.textContent = "Incorrect code. Please try again.";
+        otpError.classList.remove("hidden");
+        otpDigits.forEach(d => {
+            d.classList.add("otp-digit-error");
+            d.value = "";
+        });
+        otpDigits[0].focus();
+        return;
+    }
+
+    // OTP correct — show loading and re-sign-in the user
+    otpError.classList.add("hidden");
+    otpDigits.forEach(d => d.classList.remove("otp-digit-error"));
+    otpVerifyBtn.style.display = "none";
+    otpLoading.classList.remove("hidden");
+    clearInterval(otpTimerInterval);
+
+    // Clear OTP state so onAuthStateChanged allows app access
+    const emailToSignIn = pendingOtpEmail;
+    const passwordToSignIn = pendingOtpPassword;
+    otpVerified = true;      // prevents re-trigger when re-sign-in fires handleAuthStateChanged
+    pendingOtpEmail = null;
+    pendingOtpCode = null;
+    pendingOtpPassword = null;
+
+    // Re-sign the user in — triggers onAuthStateChanged which now proceeds normally
+    try {
+        await signInWithEmailAndPassword(auth, emailToSignIn, passwordToSignIn);
+    } catch (err) {
+        // Token sign-in fallback: if re-sign-in fails (e.g. password not cached)
+        console.error("Re-sign-in after OTP failed:", err);
+        otpLoading.classList.add("hidden");
+        otpVerifyBtn.style.display = "";
+        otpErrorText.textContent = "Verification succeeded but re-login failed. Please log in again.";
+        otpError.classList.remove("hidden");
+        pendingOtpEmail = null; // ensure we go back to auth on next sign-out
         showAuthScreen();
     }
+}
+
+async function handleOtpResend() {
+    otpResendBtn.disabled = true;
+    otpError.classList.add("hidden");
+    otpTimer.classList.remove("otp-timer-expired", "otp-timer-warning");
+    otpVerifyBtn.disabled = false;
+    otpDigits.forEach(d => { d.value = ""; d.classList.remove("otp-digit-error"); });
+    otpDigits[0].focus();
+
+    pendingOtpCode = generateOtp();
+    otpExpiresAt = Date.now() + 5 * 60 * 1000;
+
+    try {
+        await sendOtpEmail(pendingOtpEmail, pendingOtpCode);
+        showToast("📧 New code sent to your Gmail!");
+    } catch (err) {
+        console.error("Resend OTP failed:", err);
+        showToast("⚠️ Could not send email. Check console for OTP (dev mode).");
+    }
+
+    startOtpTimer();
+    setTimeout(() => { otpResendBtn.disabled = false; }, 60_000);
+}
+
+function setupOtpDigitNavigation() {
+    otpDigits.forEach((input, idx) => {
+        input.addEventListener("input", (e) => {
+            const val = e.target.value.replace(/\D/g, "");
+            input.value = val;
+            input.classList.toggle("otp-digit-filled", val.length > 0);
+            input.classList.remove("otp-digit-error");
+            if (val && idx < 5) otpDigits[idx + 1].focus();
+        });
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Backspace" && !input.value && idx > 0) {
+                otpDigits[idx - 1].focus();
+                otpDigits[idx - 1].value = "";
+                otpDigits[idx - 1].classList.remove("otp-digit-filled");
+            }
+            if (e.key === "Enter") handleOtpVerify();
+        });
+
+        input.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const pasted = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "").slice(0, 6);
+            pasted.split("").forEach((ch, i) => {
+                if (otpDigits[i]) {
+                    otpDigits[i].value = ch;
+                    otpDigits[i].classList.add("otp-digit-filled");
+                }
+            });
+            const nextEmpty = otpDigits.findIndex(d => !d.value);
+            if (nextEmpty !== -1) otpDigits[nextEmpty].focus();
+            else otpDigits[5].focus();
+        });
+    });
 }
 
 async function handleCompanySetup(event) {
@@ -377,6 +739,130 @@ async function handleSignOut() {
     }
 }
 
+async function handleForgotPassword() {
+    const email = emailInput.value.trim();
+
+    if (!email) {
+        authErrorText.textContent = "Enter your email address above, then click Forgot Password.";
+        authError.classList.remove("hidden");
+        emailInput.focus();
+        return;
+    }
+
+    if (!email.toLowerCase().endsWith("@gmail.com")) {
+        authErrorText.textContent = "Only @gmail.com accounts are supported.";
+        authError.classList.remove("hidden");
+        return;
+    }
+
+    try {
+        await sendPasswordResetEmail(auth, email);
+        authError.classList.add("hidden");
+        showToast("📧 Password reset email sent! Check your Gmail inbox.");
+    } catch (error) {
+        const msgs = {
+            "auth/user-not-found": "No account found with this email.",
+            "auth/invalid-email":  "Please enter a valid email address.",
+            "auth/too-many-requests": "Too many requests. Please wait a moment.",
+        };
+        authErrorText.textContent = msgs[error.code] || "Could not send reset email. Please try again.";
+        authError.classList.remove("hidden");
+    }
+}
+
+// ========================================================
+// DELETE ACCOUNT
+// ========================================================
+function showDeleteAccountModal() {
+    deleteAccountModal.classList.remove("hidden");
+    deleteAccountError.classList.add("hidden");
+    deleteAccountLoading.classList.add("hidden");
+    deleteAccountPassword.value = "";
+
+    // Show password field only for email/password users
+    const isEmailUser = currentUser?.providerData.some(p => p.providerId === "password");
+    if (isEmailUser) {
+        deleteReauthSection.classList.remove("hidden");
+    } else {
+        deleteReauthSection.classList.add("hidden");
+    }
+}
+
+function hideDeleteAccountModal() {
+    deleteAccountModal.classList.add("hidden");
+    deleteAccountPassword.value = "";
+    deleteAccountError.classList.add("hidden");
+    deleteAccountLoading.classList.add("hidden");
+}
+
+async function handleDeleteAccount() {
+    if (!currentUser) return;
+
+    const isEmailUser = currentUser.providerData.some(p => p.providerId === "password");
+
+    // Re-authenticate email/password users before deletion
+    if (isEmailUser) {
+        const password = deleteAccountPassword.value.trim();
+        if (!password) {
+            deleteAccountErrorText.textContent = "Please enter your password to confirm deletion.";
+            deleteAccountError.classList.remove("hidden");
+            return;
+        }
+
+        try {
+            const credential = EmailAuthProvider.credential(currentUser.email, password);
+            await reauthenticateWithCredential(currentUser, credential);
+        } catch (err) {
+            deleteAccountErrorText.textContent = "Incorrect password. Please try again.";
+            deleteAccountError.classList.remove("hidden");
+            return;
+        }
+    }
+
+    // Show loading state
+    deleteAccountError.classList.add("hidden");
+    deleteAccountLoading.classList.remove("hidden");
+    confirmDeleteAccountBtn.disabled = true;
+    cancelDeleteAccountBtn.disabled = true;
+
+    try {
+        const uid = currentUser.uid;
+
+        // 1. Delete all attendance card documents
+        const cards = await getDocs(collection(db, "companies", uid, "attendanceCards"));
+        for (const cardDoc of cards.docs) {
+            await deleteDoc(cardDoc.ref);
+        }
+
+        // 2. Delete all employee documents
+        const emps = await getDocs(collection(db, "companies", uid, "employees"));
+        for (const empDoc of emps.docs) {
+            await deleteDoc(empDoc.ref);
+        }
+
+        // 3. Delete the company root document
+        await deleteDoc(doc(db, "companies", uid));
+
+        // 4. Delete the Firebase Auth account (only the user can do this to themselves)
+        await deleteUser(currentUser);
+
+        // Auth state change will redirect to login screen
+        showToast("✅ Account deleted successfully.");
+    } catch (err) {
+        console.error("Delete account error:", err);
+        deleteAccountLoading.classList.add("hidden");
+        confirmDeleteAccountBtn.disabled = false;
+        cancelDeleteAccountBtn.disabled = false;
+
+        if (err.code === "auth/requires-recent-login") {
+            deleteAccountErrorText.textContent = "Session expired. Please sign out and sign back in, then try again.";
+        } else {
+            deleteAccountErrorText.textContent = "Failed to delete account. Please try again.";
+        }
+        deleteAccountError.classList.remove("hidden");
+    }
+}
+
 // ========================================================
 // SCREEN MANAGEMENT
 // ========================================================
@@ -384,6 +870,14 @@ function showAuthScreen() {
     authScreen.classList.remove("hidden");
     companySetupScreen.classList.add("hidden");
     appContainer.classList.add("hidden");
+    otpScreen.classList.add("hidden");
+
+    // Clear OTP state fully
+    pendingOtpEmail = null;
+    pendingOtpCode = null;
+    pendingOtpPassword = null;
+    clearInterval(otpTimerInterval);
+    clearTimeout(otpResendTimeout);
 
     // Reset auth UI
     emailAuthForm.style.display = "flex";
