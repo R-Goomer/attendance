@@ -893,6 +893,7 @@ function showCompanySetup() {
     authScreen.classList.add("hidden");
     companySetupScreen.classList.remove("hidden");
     appContainer.classList.add("hidden");
+    otpScreen.classList.add("hidden");   // clear OTP screen if coming from verification
 
     // Reset setup form
     companyNameInput.value = "";
@@ -906,6 +907,7 @@ function showApp() {
     authScreen.classList.add("hidden");
     companySetupScreen.classList.add("hidden");
     appContainer.classList.remove("hidden");
+    otpScreen.classList.add("hidden");   // clear OTP screen if coming from verification
 
     // Update header branding
     if (companyData) {
