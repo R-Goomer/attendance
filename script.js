@@ -192,10 +192,15 @@ const btnAbsentWarningNo = document.getElementById("btnAbsentWarningNo");
 const toastNotification = document.getElementById("toastNotification");
 const toastMessage = document.getElementById("toastMessage");
 
+// Attendance date picker & note elements
+const attendanceDatePicker = document.getElementById("attendanceDatePicker");
+const editNoteSection = document.getElementById("editNoteSection");
+const editNoteInput = document.getElementById("editNoteInput");
+const editNoteHint = document.getElementById("editNoteHint");
+
 // Delete Account Modal elements
 const deleteAccountModal = document.getElementById("deleteAccountModal");
 const deleteAccountOverlay = document.getElementById("deleteAccountOverlay");
-const deleteAccountBtn = document.getElementById("deleteAccountBtn");
 const confirmDeleteAccountBtn = document.getElementById("confirmDeleteAccount");
 const cancelDeleteAccountBtn = document.getElementById("cancelDeleteAccount");
 const deleteAccountPassword = document.getElementById("deleteAccountPassword");
@@ -207,6 +212,7 @@ const deleteAccountLoading = document.getElementById("deleteAccountLoading");
 let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
 let editExistingTime = null;
 let editExistingAction = null;
+let selectedAttendanceDate = null; // The date string YYYY-MM-DD currently selected in the modal
 
 // ========================================================
 // HELPER — Firestore paths scoped to current user
@@ -277,7 +283,6 @@ function setupAuthListeners() {
     setupOtpDigitNavigation();
 
     // Delete Account listeners
-    deleteAccountBtn.addEventListener("click", () => showDeleteAccountModal());
     cancelDeleteAccountBtn.addEventListener("click", () => hideDeleteAccountModal());
     deleteAccountOverlay.addEventListener("click", () => hideDeleteAccountModal());
     confirmDeleteAccountBtn.addEventListener("click", handleDeleteAccount);
@@ -762,7 +767,7 @@ async function handleForgotPassword() {
     } catch (error) {
         const msgs = {
             "auth/user-not-found": "No account found with this email.",
-            "auth/invalid-email":  "Please enter a valid email address.",
+            "auth/invalid-email": "Please enter a valid email address.",
             "auth/too-many-requests": "Too many requests. Please wait a moment.",
         };
         authErrorText.textContent = msgs[error.code] || "Could not send reset email. Please try again.";
@@ -1190,11 +1195,23 @@ async function loadEmployees() {
 async function showTimePicker(action) {
     if (!selectedEmployee) return;
 
-    // Check today's attendance to avoid duplicate check-ins/outs
+    // Validate note for past dates
+    const dateStr = selectedAttendanceDate || getTodayString();
+    if (isDateInPast(dateStr)) {
+        const note = editNoteInput.value.trim();
+        if (!note) {
+            editNoteSection.classList.remove("hidden");
+            editNoteInput.focus();
+            editNoteInput.classList.add("note-required-shake");
+            setTimeout(() => editNoteInput.classList.remove("note-required-shake"), 600);
+            showToast("⚠️ A reason/note is required for past-date entries.");
+            return;
+        }
+    }
+
+    // Check the selected date's attendance
     try {
-        const now = new Date();
-        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const day = String(now.getDate());
+        const { month, day } = getMonthAndDayFromDateStr(dateStr);
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
         const attendanceRef = attendanceCardDocRef(attendanceDocId);
         const attendanceSnap = await getDoc(attendanceRef);
@@ -1207,6 +1224,9 @@ async function showTimePicker(action) {
             editExistingAction = "IN";
             editPromptText.textContent = `Already checked IN at ${dayRecord.in}. Do you want to edit check-in time?`;
             editPrompt.classList.remove("hidden");
+            // Also ensure note section is visible for editing
+            editNoteSection.classList.remove("hidden");
+            editNoteHint.textContent = "Required — provide a reason for this edit.";
             return;
         }
 
@@ -1216,6 +1236,8 @@ async function showTimePicker(action) {
             editExistingAction = "OUT";
             editPromptText.textContent = `Already checked OUT at ${dayRecord.out}. Do you want to edit check-out time?`;
             editPrompt.classList.remove("hidden");
+            editNoteSection.classList.remove("hidden");
+            editNoteHint.textContent = "Required — provide a reason for this edit.";
             return;
         }
 
@@ -1260,6 +1282,17 @@ async function showTimePicker(action) {
 
 function handleEditYes() {
     // User chose to edit existing time — open picker and default to existing time
+    // But first check note is filled
+    const note = editNoteInput.value.trim();
+    if (!note) {
+        editNoteSection.classList.remove("hidden");
+        editNoteInput.focus();
+        editNoteInput.classList.add("note-required-shake");
+        setTimeout(() => editNoteInput.classList.remove("note-required-shake"), 600);
+        showToast("⚠️ Please provide a reason for editing.");
+        return;
+    }
+
     editPrompt.classList.add("hidden");
     if (!editExistingAction) return;
     pendingClockAction = editExistingAction;
@@ -1338,6 +1371,19 @@ async function submitTimeSelection() {
     if (!pendingClockAction || !selectedEmployee || isProcessing) return;
 
     const selectedTime = timePicker.value;
+    const dateStr = selectedAttendanceDate || getTodayString();
+    const editNote = editNoteInput.value.trim();
+
+    // Require note for past dates or edits
+    if (isDateInPast(dateStr) && !editNote) {
+        editNoteSection.classList.remove("hidden");
+        editNoteInput.focus();
+        editNoteInput.classList.add("note-required-shake");
+        setTimeout(() => editNoteInput.classList.remove("note-required-shake"), 600);
+        showToast("⚠️ A reason/note is required for past-date entries.");
+        return;
+    }
+
     isProcessing = true;
     btnClockIn.disabled = true;
     btnClockOut.disabled = true;
@@ -1347,10 +1393,8 @@ async function submitTimeSelection() {
     timePickerSection.classList.add("hidden");
 
     try {
-        const now = new Date();
-        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const day = String(now.getDate());
-        const timeString = selectedTime; // Use selected time instead of current time
+        const { month, day } = getMonthAndDayFromDateStr(dateStr);
+        const timeString = selectedTime;
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
         const action = pendingClockAction;
 
@@ -1381,6 +1425,12 @@ async function submitTimeSelection() {
             dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
         }
 
+        // Save edit note + timestamp if provided
+        if (editNote) {
+            dayRecord.editNote = editNote;
+            dayRecord.editedAt = new Date().toISOString();
+        }
+
         storedAttendance[day] = dayRecord;
 
         await setDoc(
@@ -1394,7 +1444,8 @@ async function submitTimeSelection() {
         );
 
         const actionText = action === "IN" ? "Checked in" : "Checked out";
-        confirmationText.textContent = `${selectedEmployee.name} - ${actionText} at ${timeString}`;
+        const dateDisplay = dateStr === getTodayString() ? "today" : dateStr;
+        confirmationText.textContent = `${selectedEmployee.name} — ${actionText} at ${timeString} on ${dateDisplay}`;
         confirmationMessage.classList.remove("hidden");
         loadingState.classList.add("hidden");
 
@@ -1545,6 +1596,27 @@ function createEmployeeCard(employee) {
 }
 
 // ========================================================
+// DATE HELPERS
+// ========================================================
+function getTodayString() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function isDateInPast(dateStr) {
+    // Returns true if dateStr (YYYY-MM-DD) is strictly before today
+    return dateStr < getTodayString();
+}
+
+function getMonthAndDayFromDateStr(dateStr) {
+    // dateStr: "YYYY-MM-DD"
+    const parts = dateStr.split("-");
+    const month = `${parts[0]}-${parts[1]}`;
+    const day = String(Number(parts[2])); // remove leading zero for Firestore key
+    return { month, day };
+}
+
+// ========================================================
 // MODAL FUNCTIONS
 // ========================================================
 function openAttendanceModal(employee) {
@@ -1554,9 +1626,25 @@ function openAttendanceModal(employee) {
     confirmationMessage.classList.add("hidden");
     loadingState.classList.add("hidden");
     absentWarningPrompt.classList.add("hidden");
+    editPrompt.classList.add("hidden");
+    timePickerSection.classList.add("hidden");
     btnClockIn.disabled = false;
     btnClockOut.disabled = false;
     btnAbsent.disabled = false;
+    btnClockIn.classList.remove("disabled-btn");
+    btnClockOut.classList.remove("disabled-btn");
+    btnAbsent.classList.remove("disabled-btn");
+
+    // Init date picker to today and block future dates
+    const today = getTodayString();
+    attendanceDatePicker.value = today;
+    attendanceDatePicker.max = today;
+    selectedAttendanceDate = today;
+
+    // Note section: hide for today by default
+    editNoteSection.classList.add("hidden");
+    editNoteInput.value = "";
+
     attendanceModal.classList.remove("hidden");
 }
 
@@ -1568,6 +1656,8 @@ function closeAttendanceModal() {
     timePickerSection.classList.add("hidden");
     editPrompt.classList.add("hidden");
     absentWarningPrompt.classList.add("hidden");
+    editNoteSection.classList.add("hidden");
+    editNoteInput.value = "";
     // Remove greying and re-enable all buttons
     btnClockIn.classList.remove("disabled-btn");
     btnClockOut.classList.remove("disabled-btn");
@@ -1578,6 +1668,7 @@ function closeAttendanceModal() {
     pendingClockAction = null;
     editExistingTime = null;
     editExistingAction = null;
+    selectedAttendanceDate = null;
 }
 
 function openAddEmployeeModal() {
@@ -1609,12 +1700,48 @@ function setupEventListeners() {
     btnAbsentWarningYes.addEventListener("click", handleAbsentWarningYes);
     btnAbsentWarningNo.addEventListener("click", handleAbsentWarningNo);
 
+    // Date picker change handler — show/hide note field
+    attendanceDatePicker.addEventListener("change", () => {
+        const dateStr = attendanceDatePicker.value;
+        selectedAttendanceDate = dateStr;
+        if (isDateInPast(dateStr)) {
+            editNoteSection.classList.remove("hidden");
+            editNoteHint.textContent = "Required — provide a reason for this past-date entry.";
+        } else {
+            editNoteSection.classList.add("hidden");
+            editNoteInput.value = "";
+        }
+        // Reset action UI when date changes
+        editPrompt.classList.add("hidden");
+        timePickerSection.classList.add("hidden");
+        absentWarningPrompt.classList.add("hidden");
+        btnClockIn.classList.remove("disabled-btn");
+        btnClockOut.classList.remove("disabled-btn");
+        btnAbsent.classList.remove("disabled-btn");
+        btnClockIn.disabled = false;
+        btnClockOut.disabled = false;
+        btnAbsent.disabled = false;
+        pendingClockAction = null;
+        editExistingTime = null;
+        editExistingAction = null;
+    });
+
     addEmployeeBtn.addEventListener("click", openAddEmployeeModal);
     addEmployeeClose.addEventListener("click", closeAddEmployeeModal);
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
     downloadAttendanceBtn.addEventListener("click", downloadAttendanceForMonth);
+
+    // View Attendance button
+    document.getElementById("viewAttendanceBtn").addEventListener("click", openViewAttendanceModal);
+    document.getElementById("viewAttendanceClose").addEventListener("click", closeViewAttendanceModal);
+    document.getElementById("viewAttendanceOverlay").addEventListener("click", closeViewAttendanceModal);
+    document.getElementById("viewLoadBtn").addEventListener("click", loadViewAttendance);
+
+    // Note detail popup
+    document.getElementById("noteDetailClose").addEventListener("click", closeNoteDetailPopup);
+    document.getElementById("noteDetailOverlay").addEventListener("click", closeNoteDetailPopup);
 
     document.querySelectorAll(".modal-content").forEach((content) => {
         content.addEventListener("click", (event) => event.stopPropagation());
@@ -1624,8 +1751,264 @@ function setupEventListeners() {
         if (event.key === "Escape") {
             closeAttendanceModal();
             closeAddEmployeeModal();
+            closeViewAttendanceModal();
+            closeNoteDetailPopup();
         }
     });
+}
+
+// ========================================================
+// VIEW ATTENDANCE MODAL
+// ========================================================
+function openViewAttendanceModal() {
+    const modal = document.getElementById("viewAttendanceModal");
+    modal.classList.remove("hidden");
+
+    // Populate year / month selectors (same logic as download controls)
+    const viewYear = document.getElementById("viewYear");
+    const viewMonth = document.getElementById("viewMonth");
+    viewYear.innerHTML = "";
+    viewMonth.innerHTML = "";
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    for (let y = currentYear - 2; y <= currentYear; y++) {
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        if (y === currentYear) opt.selected = true;
+        viewYear.appendChild(opt);
+    }
+
+    const monthNames = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+    monthNames.forEach((m, idx) => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = `${m} (${new Date(0, idx).toLocaleString("default", { month: "short" })})`;
+        if (idx === now.getMonth()) opt.selected = true;
+        viewMonth.appendChild(opt);
+    });
+
+    // Clear table
+    document.getElementById("viewAttendanceTableWrap").innerHTML =
+        '<p class="view-placeholder">Select a month and click Load to view attendance.</p>';
+}
+
+function closeViewAttendanceModal() {
+    document.getElementById("viewAttendanceModal").classList.add("hidden");
+}
+
+async function loadViewAttendance() {
+    const selectedYear  = document.getElementById("viewYear").value;
+    const selectedMonth = document.getElementById("viewMonth").value;
+
+    if (!selectedYear || !selectedMonth) {
+        showToast("⚠️ Please select a year and month.");
+        return;
+    }
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    const wrap = document.getElementById("viewAttendanceTableWrap");
+    wrap.innerHTML = '<div class="view-loading"><div class="spinner-small"></div><p>Loading…</p></div>';
+
+    try {
+        // ── Fetch employees ──────────────────────────────────────
+        if (employees.length === 0) {
+            wrap.innerHTML = '<p class="view-placeholder">No employees found.</p>';
+            return;
+        }
+        const empList = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        // ── Fetch attendance cards for all employees this month ──
+        const attendanceQuery = query(
+            attendanceCardsCollectionRef(),
+            where("month", "==", monthKey)
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceMap = {};
+        attendanceSnap.forEach(d => { attendanceMap[d.id] = d.data(); });
+
+        // ── Build table ──────────────────────────────────────────
+        const year       = Number(selectedYear);
+        const monthNum   = Number(selectedMonth);
+        const daysInMonth = getDaysInMonth(year, monthNum);
+        const todayStr   = getTodayString();
+
+        // Totals per employee
+        const totals = empList.map(() => ({ present: 0, absent: 0, missedMinutes: 0 }));
+
+        // Two-row header (employee name spanning 3 cols, then IN/OUT/Hrs Missed sub-header)
+        let header1 = `<tr><th rowspan="2" class="th-date">Date</th>`;
+        let header2 = `<tr>`;
+        empList.forEach(emp => {
+            header1 += `<th colspan="4" class="th-emp-name">${escapeHtml(emp.name)}</th>`;
+            header2 += `<th>IN</th><th>OUT</th><th>Hrs&nbsp;Missed</th><th class="th-edited-col"></th>`;
+        });
+        header1 += `</tr>`;
+        header2 += `</tr>`;
+
+        let bodyRows = "";
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const paddedDay  = String(d).padStart(2, "0");
+            const fullDateStr = `${selectedYear}-${selectedMonth}-${paddedDay}`;
+            if (fullDateStr > todayStr) continue; // skip future
+
+            const dayKey  = String(d);
+            const dateObj = new Date(year, monthNum - 1, d);
+            const isSunday = dateObj.getDay() === 0;
+
+            // Determine row-level class (driven by first non-sunday employee or sunday)
+            let rowMeta = isSunday ? "row-sunday" : "";
+
+            let cells = "";
+            empList.forEach((emp, idx) => {
+                const card    = attendanceMap[`${emp.id}_${monthKey}`];
+                const rec     = card?.attendance?.[dayKey] || null;
+                const isEdited = !!(rec?.editNote);
+
+                let inVal = "—", outVal = "—", missedVal = "—";
+                let cellClass = "";
+                let editAttr  = "";
+                let editIcon  = "";
+
+                if (isSunday && !rec) {
+                    inVal = "Sunday"; outVal = "Sunday"; missedVal = "—";
+                    cellClass = "cell-sunday";
+                } else if (rec) {
+                    if (rec.Status === "A") {
+                        inVal = "Absent"; outVal = "Absent"; missedVal = "00:00";
+                        cellClass = isEdited ? "cell-absent cell-edited" : "cell-absent";
+                        if (!isSunday) totals[idx].absent++;
+                    } else if (rec.Status === "P") {
+                        inVal  = rec.in  || "—";
+                        outVal = rec.out || "—";
+                        cellClass = isEdited ? "cell-present cell-edited" : "cell-present";
+                        totals[idx].present++;
+
+                        const workedMinutes = Math.round(Number(rec.hours || 0) * 60);
+                        if (!rec.out) {
+                            if (isSunday) {
+                                inVal = rec.in || "Sunday"; outVal = "Sunday"; missedVal = "—";
+                            } else {
+                                const missed = Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+                                missedVal = missed > 0 ? formatMinutes(missed) : "00:00";
+                                totals[idx].missedMinutes += missed;
+                            }
+                        } else {
+                            if (isSunday) {
+                                missedVal = "—";
+                            } else {
+                                const missed = Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+                                missedVal = missed > 0 ? formatMinutes(missed) : "00:00";
+                                totals[idx].missedMinutes += missed;
+                            }
+                        }
+                    }
+                } else {
+                    // No record
+                    if (isSunday) {
+                        inVal = "Sunday"; outVal = "Sunday"; missedVal = "—";
+                        cellClass = "cell-sunday";
+                    } else {
+                        inVal = "Absent"; outVal = "Absent"; missedVal = "00:00";
+                        cellClass = "cell-absent";
+                        totals[idx].absent++;
+                    }
+                }
+
+                if (isEdited) {
+                    const noteEsc = escapeHtml(rec.editNote || "");
+                    const edAtEsc = escapeHtml(rec.editedAt || "");
+                    editIcon = `<span class="edited-badge" data-note="${noteEsc}" data-date="${fullDateStr}" data-edited-at="${edAtEsc}" title="Edited — click to see note">✏️</span>`;
+                }
+
+                cells += `<td class="${cellClass}">${inVal}</td>`;
+                cells += `<td class="${cellClass}">${outVal}</td>`;
+                cells += `<td class="${cellClass} cell-missed">${missedVal}</td>`;
+                cells += `<td class="cell-edit-icon">${editIcon}</td>`;
+            });
+
+            // Row-level edited attribute: if any cell in this row is edited we want the row clickable
+            // But since edits are per-employee, we handle clicks at cell level via JS below.
+            bodyRows += `<tr class="${rowMeta}" data-date="${fullDateStr}">
+                <td class="td-date">${fullDateStr}</td>${cells}</tr>`;
+        }
+
+        // ── Summary rows ─────────────────────────────────────────
+        let summaryPresent  = `<tr class="summary-row"><td class="summary-label">✅ Total Present</td>`;
+        let summaryAbsent   = `<tr class="summary-row"><td class="summary-label">❌ Total Absent</td>`;
+        let summaryMissed   = `<tr class="summary-row"><td class="summary-label">⏱ Hrs Missed</td>`;
+        totals.forEach(t => {
+            summaryPresent += `<td colspan="2" class="summary-val">${t.present}</td><td colspan="2"></td>`;
+            summaryAbsent  += `<td colspan="2" class="summary-val">${t.absent}</td><td colspan="2"></td>`;
+            summaryMissed  += `<td colspan="3" class="summary-val missed-val">${formatMinutes(t.missedMinutes)}</td><td></td>`;
+        });
+        summaryPresent += `</tr>`;
+        summaryAbsent  += `</tr>`;
+        summaryMissed  += `</tr>`;
+
+        const tableHtml = `
+            <div class="view-table-month-label">
+                Attendance — ${selectedMonth}/${selectedYear}
+                <span class="view-emp-count">${empList.length} employee${empList.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div class="view-table-scroll">
+                <table class="view-table view-table-multi">
+                    <thead>${header1}${header2}</thead>
+                    <tbody>${bodyRows}</tbody>
+                    <tfoot>${summaryPresent}${summaryAbsent}${summaryMissed}</tfoot>
+                </table>
+            </div>`;
+
+        wrap.innerHTML = tableHtml;
+
+        // Wire edited-badge click events
+        wrap.querySelectorAll(".edited-badge").forEach(badge => {
+            badge.addEventListener("click", (e) => {
+                e.stopPropagation();
+                showNoteDetailPopup(
+                    badge.getAttribute("data-note") || "",
+                    badge.getAttribute("data-date") || "",
+                    badge.getAttribute("data-edited-at") || ""
+                );
+            });
+        });
+
+        // Also make entire edited cells clickable
+        wrap.querySelectorAll(".cell-edited").forEach(cell => {
+            cell.style.cursor = "pointer";
+            cell.addEventListener("click", (e) => {
+                const row   = cell.closest("tr");
+                const badge = row?.querySelector(".edited-badge");
+                if (badge) badge.click();
+            });
+        });
+
+    } catch (err) {
+        console.error("Error loading attendance view:", err);
+        wrap.innerHTML = '<p class="view-placeholder view-error">Failed to load attendance data.</p>';
+    }
+}
+
+// ========================================================
+// NOTE DETAIL POPUP
+// ========================================================
+function showNoteDetailPopup(note, dateStr, editedAt) {
+    document.getElementById("noteDetailText").textContent = note || "(no note)";
+    document.getElementById("noteDetailDate").textContent = `Date: ${dateStr}`;
+    if (editedAt) {
+        const d = new Date(editedAt);
+        document.getElementById("noteDetailTimestamp").textContent =
+            `Edited on: ${d.toLocaleDateString()} at ${d.toLocaleTimeString()}`;
+    } else {
+        document.getElementById("noteDetailTimestamp").textContent = "";
+    }
+    document.getElementById("noteDetailPopup").classList.remove("hidden");
+}
+
+function closeNoteDetailPopup() {
+    document.getElementById("noteDetailPopup").classList.add("hidden");
 }
 
 // ========================================================
@@ -1663,6 +2046,19 @@ function computeHours(inTime, outTime) {
 async function handleAbsentAction() {
     if (!selectedEmployee || isProcessing) return;
 
+    const dateStr = selectedAttendanceDate || getTodayString();
+    const editNote = editNoteInput.value.trim();
+
+    // Require note for past dates
+    if (isDateInPast(dateStr) && !editNote) {
+        editNoteSection.classList.remove("hidden");
+        editNoteInput.focus();
+        editNoteInput.classList.add("note-required-shake");
+        setTimeout(() => editNoteInput.classList.remove("note-required-shake"), 600);
+        showToast("⚠️ A reason/note is required for past-date entries.");
+        return;
+    }
+
     isProcessing = true;
     pendingClockAction = "ABSENT";
     // Grey out buttons
@@ -1677,9 +2073,7 @@ async function handleAbsentAction() {
     absentWarningPrompt.classList.add("hidden");
 
     try {
-        const now = new Date();
-        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const day = String(now.getDate());
+        const { month, day } = getMonthAndDayFromDateStr(dateStr);
         const attendanceDocId = `${selectedEmployee.id}_${month}`;
 
         const attendanceRef = attendanceCardDocRef(attendanceDocId);
@@ -1696,7 +2090,12 @@ async function handleAbsentAction() {
         }
 
         // Proceed directly if no checked in times
-        storedAttendance[day] = { Status: "A" };
+        const newRecord = { Status: "A" };
+        if (editNote) {
+            newRecord.editNote = editNote;
+            newRecord.editedAt = new Date().toISOString();
+        }
+        storedAttendance[day] = newRecord;
 
         await setDoc(
             attendanceRef,
@@ -1708,7 +2107,8 @@ async function handleAbsentAction() {
             { merge: true }
         );
 
-        confirmationText.textContent = `${selectedEmployee.name} - Marked absent for today`;
+        const dateDisplay = dateStr === getTodayString() ? "today" : dateStr;
+        confirmationText.textContent = `${selectedEmployee.name} — Marked absent for ${dateDisplay}`;
         confirmationMessage.classList.remove("hidden");
         loadingState.classList.add("hidden");
 
@@ -1739,13 +2139,24 @@ async function handleAbsentWarningYes() {
     absentWarningPrompt.classList.add("hidden");
     loadingState.classList.remove("hidden");
 
-    try {
-        const now = new Date();
-        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const day = String(now.getDate());
-        const attendanceDocId = `${selectedEmployee.id}_${month}`;
+    const dateStr = selectedAttendanceDate || getTodayString();
+    const editNote = editNoteInput.value.trim();
+    const { month, day } = getMonthAndDayFromDateStr(dateStr);
 
+    try {
+        const attendanceDocId = `${selectedEmployee.id}_${month}`;
         const attendanceRef = attendanceCardDocRef(attendanceDocId);
+
+        const newDayRecord = {
+            Status: "A",
+            in: deleteField(),
+            out: deleteField(),
+            hours: deleteField()
+        };
+        if (editNote) {
+            newDayRecord.editNote = editNote;
+            newDayRecord.editedAt = new Date().toISOString();
+        }
 
         // Delete checking times from Firebase and set Status to 'A'
         await setDoc(
@@ -1754,18 +2165,14 @@ async function handleAbsentWarningYes() {
                 employeeId: selectedEmployee.id,
                 month,
                 attendance: {
-                    [day]: {
-                        Status: "A",
-                        in: deleteField(),
-                        out: deleteField(),
-                        hours: deleteField()
-                    }
+                    [day]: newDayRecord
                 }
             },
             { merge: true }
         );
 
-        confirmationText.textContent = `${selectedEmployee.name} - Marked absent for today`;
+        const dateDisplay = dateStr === getTodayString() ? "today" : dateStr;
+        confirmationText.textContent = `${selectedEmployee.name} — Marked absent for ${dateDisplay}`;
         confirmationMessage.classList.remove("hidden");
         loadingState.classList.add("hidden");
 
