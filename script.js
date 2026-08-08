@@ -1051,7 +1051,9 @@ async function downloadAttendanceForMonth() {
                         }
                     } else {
                         inValue = dayRecord.in || "";
-                        outValue = dayRecord.out || "";
+                        outValue = dayRecord.defaultOut
+                            ? "17:30 (default)"
+                            : (dayRecord.out || "");
                         if (dayRecord.Status === "P") {
                             totals[idx].present += 1;
                         }
@@ -1231,7 +1233,8 @@ async function showTimePicker(action) {
         }
 
         // If user already checked OUT and clicked OUT, show in-UI edit prompt
-        if (action === "OUT" && dayRecord?.out) {
+        // But if the existing OUT is only a default (auto-set), skip the prompt and go straight to picker
+        if (action === "OUT" && dayRecord?.out && !dayRecord?.defaultOut) {
             editExistingTime = dayRecord.out;
             editExistingAction = "OUT";
             editPromptText.textContent = `Already checked OUT at ${dayRecord.out}. Do you want to edit check-out time?`;
@@ -1420,9 +1423,15 @@ async function submitTimeSelection() {
         dayRecord.Status = "P";
         if (action === "IN") {
             dayRecord.in = timeString;
+            // Set default OUT to 17:30 until user manually overrides it
+            dayRecord.out = "17:30";
+            dayRecord.defaultOut = true;
+            dayRecord.hours = computeHours(timeString, "17:30");
         } else {
             dayRecord.out = timeString;
             dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
+            // Clear the default flag — user has now manually set OUT
+            delete dayRecord.defaultOut;
         }
 
         // Save edit note + timestamp if provided
@@ -1445,7 +1454,10 @@ async function submitTimeSelection() {
 
         const actionText = action === "IN" ? "Checked in" : "Checked out";
         const dateDisplay = dateStr === getTodayString() ? "today" : dateStr;
-        confirmationText.textContent = `${selectedEmployee.name} — ${actionText} at ${timeString} on ${dateDisplay}`;
+        const confirmMsg = action === "IN"
+            ? `${selectedEmployee.name} — Checked in at ${timeString} on ${dateDisplay}. Default OUT set to 5:30 PM.`
+            : `${selectedEmployee.name} — ${actionText} at ${timeString} on ${dateDisplay}`;
+        confirmationText.textContent = confirmMsg;
         confirmationMessage.classList.remove("hidden");
         loadingState.classList.add("hidden");
 
@@ -1882,7 +1894,9 @@ async function loadViewAttendance() {
                         if (!isSunday) totals[idx].absent++;
                     } else if (rec.Status === "P") {
                         inVal  = rec.in  || "—";
-                        outVal = rec.out || "—";
+                        outVal = rec.defaultOut
+                            ? `<span title="Default OUT — not manually confirmed" class="default-out">17:30*</span>`
+                            : (rec.out || "—");
                         cellClass = isEdited ? "cell-present cell-edited" : "cell-present";
                         totals[idx].present++;
 
