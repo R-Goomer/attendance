@@ -610,31 +610,6 @@ input, textarea {
     flex-wrap: wrap;
 }
 
-.export-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.export-controls select,
-.export-controls button {
-    border-radius: 999px;
-    padding: 0.5rem 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.08);
-    color: white;
-    font-size: 0.85rem;
-}
-
-.export-controls select {
-    min-width: 5.2rem;
-}
-
-.export-controls button {
-    min-width: auto;
-}
-
 /* Logo Placeholder */
 .logo-placeholder {
     display: flex;
@@ -2016,9 +1991,41 @@ input, textarea {
 .legend-absent   { background: #ef4444; }
 .legend-edited   { background: #f59e0b; border: 2px solid #d97706; }
 
+/* Download row below the table in the view modal */
+.view-download-row {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+}
+.btn-download-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+.btn-download-view:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+}
+.btn-download-view:active {
+    transform: translateY(0);
+}
+
 /* Table wrapper */
 .view-attendance-table-wrap {
     overflow-y: auto;
+    overflow-x: auto;       /* single scroll container — keeps sticky working */
     flex: 1;
     border-radius: 12px;
     border: 1px solid var(--border-color);
@@ -2027,7 +2034,7 @@ input, textarea {
     max-height: 420px;
 }
 .view-table-scroll {
-    overflow-x: auto;
+    /* overflow-x removed — handled by parent so sticky thead is not broken */
 }
 .view-table-employee-label {
     padding: 10px 16px 6px;
@@ -2038,7 +2045,7 @@ input, textarea {
     position: sticky;
     top: 0;
     background: #fff;
-    z-index: 1;
+    z-index: 3;
 }
 .view-table {
     width: 100%;
@@ -2048,7 +2055,7 @@ input, textarea {
 .view-table thead {
     position: sticky;
     top: 36px;
-    z-index: 1;
+    z-index: 2;
 }
 .view-table th {
     background: linear-gradient(135deg, #f0f4ff, #e8eeff);
@@ -2253,8 +2260,9 @@ input, textarea {
     gap: 10px;
     position: sticky;
     top: 0;
+    left: 0;             /* stays in place during horizontal scroll too */
     background: #fff;
-    z-index: 2;
+    z-index: 3;
 }
 .view-emp-count {
     font-size: 0.75rem;

@@ -171,9 +171,6 @@ const addEmployeeClose = document.getElementById("addEmployeeClose");
 const cancelAddEmployee = document.getElementById("cancelAddEmployee");
 const employeeIdInput = document.getElementById("employeeIdInput");
 const jobTitleInput = document.getElementById("jobTitleInput");
-const selectYear = document.getElementById("selectYear");
-const selectMonth = document.getElementById("selectMonth");
-const downloadAttendanceBtn = document.getElementById("downloadAttendanceBtn");
 const addEmployeeMessage = document.getElementById("addEmployeeMessage");
 const addEmployeeMessageText = document.getElementById("addEmployeeMessageText");
 const timePickerSection = document.getElementById("timePickerSection");
@@ -940,46 +937,14 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupApp() {
     updateClock();
     setInterval(updateClock, 1000);
-    populateMonthYearSelectors();
     loadEmployees();
     setupEventListeners();
 }
 
-function populateMonthYearSelectors() {
-    // Clear existing options to prevent duplicates on re-init
-    selectYear.innerHTML = "";
-    selectMonth.innerHTML = "";
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const startYear = currentYear - 2;
-    const endYear = currentYear + 1;
-
-    for (let year = startYear; year <= endYear; year++) {
-        const option = document.createElement("option");
-        option.value = String(year);
-        option.textContent = String(year);
-        if (year === currentYear) option.selected = true;
-        selectYear.appendChild(option);
-    }
-
-    const monthNames = [
-        "01", "02", "03", "04", "05", "06",
-        "07", "08", "09", "10", "11", "12",
-    ];
-
-    monthNames.forEach((month, index) => {
-        const option = document.createElement("option");
-        option.value = month;
-        option.textContent = `${month} (${new Date(0, index).toLocaleString("default", { month: "short" })})`;
-        if (index === now.getMonth()) option.selected = true;
-        selectMonth.appendChild(option);
-    });
-}
 
 async function downloadAttendanceForMonth() {
-    const selectedYear = selectYear.value;
-    const selectedMonth = selectMonth.value;
+    const selectedYear  = document.getElementById("viewYear").value;
+    const selectedMonth = document.getElementById("viewMonth").value;
 
     if (!selectedYear || !selectedMonth) {
         showToast("❌ Select both year and month");
@@ -1743,7 +1708,7 @@ function setupEventListeners() {
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
-    downloadAttendanceBtn.addEventListener("click", downloadAttendanceForMonth);
+    document.getElementById("viewDownloadBtn").addEventListener("click", downloadAttendanceForMonth);
 
     // View Attendance button
     document.getElementById("viewAttendanceBtn").addEventListener("click", openViewAttendanceModal);
