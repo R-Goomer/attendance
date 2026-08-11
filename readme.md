@@ -149,6 +149,33 @@ Once the server is running:
 
 ---
 
+## Siri Shortcut Integration (Who is Absent Today)
+
+You can ask Siri *"Who is absent today?"* on your iPhone, iPad, or Mac to hear today's absent employees announced out loud.
+
+### 1. Netlify Serverless Function Deployment
+
+A serverless API endpoint is located at `netlify/functions/absent.js`. It authenticates with Firebase Auth, checks today's attendance cards, and formats a human-friendly spoken response.
+
+To deploy the function to Netlify:
+```bash
+npx netlify deploy --prod
+```
+
+> **Note:** The repository configuration (`netlify.toml`) is set to deploy *only* the serverless function and ignore static website files. Make sure site access is set to **Public** under Netlify Site Settings.
+
+### 2. Configure Apple Shortcuts App
+
+1. Open the **Shortcuts** app on your iPhone, iPad, or Mac.
+2. Create a new shortcut named **`Who is absent today`**.
+3. Add **Action 1: Get Contents of URL**
+   - **URL**: `https://<your-netlify-app>.netlify.app/.netlify/functions/absent?email=YOUR_EMAIL&password=YOUR_PASSWORD`
+4. Add **Action 2: Speak Text**
+   - Set input to `Contents of URL`.
+5. Run the shortcut by saying: *"Hey Siri, who is absent today?"*
+
+---
+
 ## Files Included
 
 - `index.html` - Main HTML structure with semantic markup
