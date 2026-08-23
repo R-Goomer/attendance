@@ -2040,8 +2040,8 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
         ? Number(emp.penaltyMultiplier)
         : 1.25;
 
-    // Daily wage = Salary / number of days in the month
-    const dailyWage = baseSalary > 0 ? (baseSalary / daysInMonth) : 0;
+    // Daily wage = Salary / number of days in the month = 30
+    const dailyWage = baseSalary > 0 ? (baseSalary / 30) : 0;
 
     // Hourly base rate = Salary / 208 default (editable)
     const hourlyBaseRate = baseSalary > 0 ? (baseSalary / hoursDivisor) : 0;
