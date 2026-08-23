@@ -2385,7 +2385,7 @@ input, textarea {
 }
 
 /* =====================================================
-   MASTER BUTTON & MASTER MODAL STYLES
+   MASTER BUTTON & MASTER PANEL STYLES
    ===================================================== */
 .btn-master {
     display: flex;
@@ -2432,8 +2432,10 @@ input, textarea {
     padding: 2.2rem;
     text-align: center;
     border-radius: 20px;
+    background: #ffffff;
     box-shadow: var(--shadow-xl);
     animation: cardSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1001;
 }
 
 .master-auth-body {
@@ -2510,29 +2512,35 @@ input, textarea {
     animation: shakeAuth 0.4s ease-in-out;
 }
 
-/* Master Settings Modal */
+/* =====================================================
+   MASTER SETTINGS MODAL (Overhauled Layout)
+   ===================================================== */
 .master-settings-modal-content {
-    max-width: 820px;
+    max-width: 1080px;
     width: 95%;
-    max-height: 90vh;
+    max-height: 92vh;
     overflow-y: auto;
     padding: 2rem;
     border-radius: 20px;
-    box-shadow: var(--shadow-xl);
+    background: #ffffff;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22);
     animation: cardSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
 }
 
 .master-settings-body {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
 }
 
 .master-settings-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding-bottom: 1rem;
+    padding-bottom: 0.85rem;
     border-bottom: 1px solid var(--border-color);
     gap: 1rem;
 }
@@ -2566,8 +2574,8 @@ input, textarea {
     color: var(--text-secondary);
     border: 1.5px solid var(--border-color);
     border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.8rem;
+    padding: 7px 14px;
+    font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
     transition: var(--transition);
@@ -2583,17 +2591,19 @@ input, textarea {
     display: flex;
     gap: 0.5rem;
     background: #f1f5f9;
-    padding: 4px;
+    padding: 5px;
     border-radius: 12px;
+    flex-wrap: wrap;
 }
 
 .master-tab {
     flex: 1;
+    min-width: 160px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 0.7rem 1rem;
+    padding: 0.75rem 1rem;
     border: none;
     border-radius: 9px;
     font-size: 0.88rem;
@@ -2606,7 +2616,7 @@ input, textarea {
 
 .master-tab:hover:not(.active) {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.6);
 }
 
 .master-tab.active {
@@ -2615,18 +2625,13 @@ input, textarea {
     box-shadow: var(--shadow-sm);
 }
 
-/* Master Section & Cards */
+/* Master Sections */
 .master-section {
     animation: fadeIn 0.25s ease-in-out;
 }
 
 .master-section.hidden {
     display: none;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 .master-card-box {
@@ -2640,70 +2645,295 @@ input, textarea {
     box-shadow: var(--shadow-sm);
 }
 
-.master-card-box-header {
+/* Payroll Controls & Summary Stats */
+.master-salary-controls-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 1rem;
-}
-
-.master-icon-circle {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.download-icon-circle {
-    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-    color: #4338ca;
-}
-
-.master-section-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-}
-
-.master-section-desc {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-top: 2px;
-}
-
-/* Download Controls */
-.master-download-controls {
-    display: flex;
-    align-items: flex-end;
     gap: 1rem;
     flex-wrap: wrap;
-    padding: 1.25rem;
-    background: #f8fafc;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
 }
 
-.btn-master-download {
+.master-salary-month-select {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0.65rem 1.4rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.payroll-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.payroll-stat-card {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.payroll-stat-card.highlight {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(16, 185, 129, 0.04));
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.stat-label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.stat-val {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.text-danger { color: #dc2626 !important; }
+.text-warning { color: #d97706 !important; }
+.text-success { color: #16a34a !important; }
+
+/* Master Tables */
+.master-table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    max-height: 480px;
+}
+
+.master-salary-table,
+.master-employees-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.85rem;
     white-space: nowrap;
 }
 
-.btn-master-download:hover {
-    background: linear-gradient(135deg, #4338ca, #4f46e5);
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+.master-salary-table th,
+.master-employees-table th {
+    background: #f8fafc;
+    color: var(--text-secondary);
+    font-weight: 700;
+    padding: 11px 14px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1.5px solid var(--border-color);
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
 }
 
-/* Master Employee Table & Management */
-.master-employees-toolbar {
+.master-salary-table td,
+.master-employees-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.master-salary-table tbody tr:hover,
+.master-employees-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.badge-penalty {
+    display: inline-block;
+    font-size: 0.72rem;
+    background: #fee2e2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.badge-net-pay {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #16a34a;
+    background: rgba(34, 197, 94, 0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+}
+
+/* Master Action Buttons */
+.btn-action-group {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.btn-slip-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #fff;
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-slip-view:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
+}
+
+.btn-loan-manage {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f1f5f9;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-loan-manage:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+}
+
+.btn-edit-salary-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    color: var(--primary-color);
+    border: 1px dashed var(--primary-light);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.btn-edit-salary-action:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* =====================================================
+   EDIT SALARY MODAL
+   ===================================================== */
+.edit-salary-modal-content {
+    max-width: 440px;
+    width: 90%;
+    padding: 2rem;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: var(--shadow-xl);
+    z-index: 1002;
+}
+
+/* =====================================================
+   LOAN & ADVANCE MANAGEMENT MODAL
+   ===================================================== */
+.loan-modal-content {
+    max-width: 780px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 2rem;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: var(--shadow-xl);
+    z-index: 1002;
+    display: flex;
+    flex-direction: column;
+}
+
+.loan-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.25rem;
+}
+
+.loan-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.25rem;
+}
+
+.loan-stat-box {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.loan-stat-box.highlight-loan {
+    background: #fff1f2;
+    border-color: #fecdd3;
+}
+
+.loan-stat-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.loan-stat-amount {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.loan-subheading {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.loan-action-section {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin-bottom: 1.25rem;
+}
+
+.financial-form-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.monthly-deduction-section {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+    border: 1.5px solid rgba(99, 102, 241, 0.2);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.monthly-deduction-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2711,93 +2941,388 @@ input, textarea {
     flex-wrap: wrap;
 }
 
-.master-search-wrap {
-    min-width: 240px;
-}
-
-.master-search-input {
-    width: 100%;
-    padding: 8px 14px;
-    border: 1.5px solid var(--border-color);
-    border-radius: 8px;
-    font-size: 0.85rem;
-    outline: none;
-    transition: var(--transition);
-}
-
-.master-search-input:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-}
-
-.master-employees-table-wrap {
-    max-height: 380px;
+.loan-ledger-wrap {
+    max-height: 240px;
     overflow-y: auto;
     border: 1px solid var(--border-color);
     border-radius: 10px;
 }
 
-.master-employees-table {
+.loan-ledger-table {
     width: 100%;
     border-collapse: collapse;
     text-align: left;
-    font-size: 0.88rem;
+    font-size: 0.82rem;
 }
 
-.master-employees-table th {
+.loan-ledger-table th {
     background: #f8fafc;
     color: var(--text-secondary);
     font-weight: 600;
-    padding: 10px 14px;
+    padding: 8px 12px;
     position: sticky;
     top: 0;
-    z-index: 2;
     border-bottom: 1.5px solid var(--border-color);
 }
 
-.master-employees-table td {
-    padding: 10px 14px;
+.loan-ledger-table td {
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border-color);
-    color: var(--text-primary);
 }
 
-.master-employees-table tbody tr:hover {
-    background: #f8fafc;
-}
-
-.master-emp-id-badge {
+/* Multiplier Badge in tables */
+.badge-multiplier {
     display: inline-block;
-    font-family: monospace;
-    font-size: 0.8rem;
-    background: rgba(99, 102, 241, 0.08);
-    color: var(--primary-color);
-    padding: 2px 6px;
+    font-size: 0.72rem;
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+    padding: 1px 6px;
     border-radius: 4px;
     font-weight: 600;
+    margin-top: 2px;
 }
 
-.btn-delete-emp-master {
-    display: inline-flex;
+/* =====================================================
+   SALARY SLIP MODAL & A4 2-UP (TOP & BOTTOM) PRINT STYLES
+   ===================================================== */
+.salary-slip-modal-content {
+    max-width: 920px;
+    width: 95%;
+    max-height: 94vh;
+    overflow-y: auto;
+    padding: 0;
+    border-radius: 20px;
+    background: #475569;
+    box-shadow: var(--shadow-xl);
+    z-index: 1003;
+    display: flex;
+    flex-direction: column;
+}
+
+.salary-slip-modal-toolbar {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 6px;
-    background: #fef2f2;
-    color: #dc2626;
-    border: 1px solid #fecaca;
-    padding: 6px 12px;
-    border-radius: 7px;
-    font-size: 0.8rem;
+    padding: 1rem 1.5rem;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.slip-toolbar-badge {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary-color);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.salary-slip-viewport {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #334155;
+    min-height: 480px;
+    gap: 24px;
+}
+
+.salary-slip-print-area {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* A4 Sheet Container (holds Top Half + Cut Line + Bottom Half) */
+.a4-page-sheet {
+    background: #ffffff;
+    width: 100%;
+    max-width: 800px;
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+    color: #1e293b;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+    margin-bottom: 24px;
+    page-break-after: always;
+    break-after: page;
+}
+
+.a4-page-sheet:last-child {
+    margin-bottom: 0;
+}
+
+/* Individual Half Slip (Top or Bottom) */
+.slip-half {
+    padding: 18px 24px;
+    box-sizing: border-box;
+    position: relative;
+}
+
+/* Dashed Cut Line in Center */
+.slip-cut-divider {
+    border-top: 1.5px dashed #94a3b8;
+    background: #f8fafc;
+    padding: 5px 12px;
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-transform: uppercase;
+}
+
+.slip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1.5px solid #6366f1;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.slip-company-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.slip-company-logo {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+}
+
+.slip-company-name {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.15;
+}
+
+.slip-title-badge {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.slip-title-text {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #4f46e5;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+}
+
+.slip-copy-tag {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.slip-period-text {
+    font-size: 0.78rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
+    color: #64748b;
+    margin: 0;
 }
 
-.btn-delete-emp-master:hover {
-    background: #fee2e2;
-    border-color: #f87171;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
+/* Employee Details Bar */
+.slip-emp-box {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 6px 10px;
+    gap: 6px;
+    margin-bottom: 8px;
 }
 
-.btn-delete-emp-master:active {
-    transform: translateY(0);
+.slip-emp-field {
+    display: flex;
+    flex-direction: column;
 }
+
+.slip-emp-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.slip-emp-val {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* Payslip Breakdown Table */
+.slip-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    margin-bottom: 8px;
+}
+
+.slip-table th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    padding: 5px 8px;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1.5px solid #cbd5e1;
+}
+
+.slip-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+}
+
+.slip-table .row-subtotal td {
+    background: #f8fafc;
+    font-weight: 700;
+    border-top: 1.5px solid #cbd5e1;
+    border-bottom: 1.5px solid #cbd5e1;
+}
+
+.slip-table .row-net td {
+    background: linear-gradient(135deg, #eff6ff, #e0e7ff);
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: #1e1b4b;
+    border-top: 1.5px solid #6366f1;
+    border-bottom: 1.5px solid #6366f1;
+}
+
+.slip-loan-summary-box {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.74rem;
+    margin-bottom: 8px;
+}
+
+.slip-formula-note {
+    font-size: 0.65rem;
+    color: #64748b;
+    font-style: italic;
+    line-height: 1.3;
+    margin-bottom: 10px;
+}
+
+/* Signatures */
+.slip-signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 6px;
+}
+
+.slip-signature-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 150px;
+}
+
+.slip-signature-line {
+    width: 100%;
+    border-top: 1px dashed #94a3b8;
+    margin-bottom: 3px;
+}
+
+.slip-signature-text {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+/* =====================================================
+   PRINT MEDIA STYLES (A4 Portrait Standard)
+   ===================================================== */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .no-print, .modal-overlay, .modal-close {
+        display: none !important;
+    }
+    #salarySlipModal,
+    #salarySlipModal .modal-content,
+    .salary-slip-viewport,
+    #salarySlipPrintArea,
+    #salarySlipPrintArea * {
+        visibility: visible;
+    }
+    #salarySlipModal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        background: #fff;
+        display: block !important;
+    }
+    .salary-slip-modal-content {
+        box-shadow: none !important;
+        border: none !important;
+        background: #fff !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .salary-slip-viewport {
+        background: #fff !important;
+        padding: 0 !important;
+        gap: 0 !important;
+    }
+    .a4-page-sheet {
+        box-shadow: none !important;
+        border: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        page-break-after: always !important;
+        break-after: page !important;
+    }
+    .a4-page-sheet:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+    }
+    @page {
+        size: A4 portrait;
+        margin: 6mm 6mm;
+    }
+}
+
