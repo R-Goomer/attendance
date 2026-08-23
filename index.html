@@ -896,7 +896,7 @@
                     
                     <div class="form-field">
                         <label for="baseSalaryInput">Monthly Base Salary (₹)</label>
-                        <input type="number" id="baseSalaryInput" min="0" step="100" placeholder="e.g. 20000" required>
+                        <input type="number" id="baseSalaryInput" min="0" step="any" placeholder="e.g. 20000" required>
                         <span class="field-hint">Daily wage = Salary / Days in Month.</span>
                     </div>
 
@@ -971,7 +971,7 @@
                             </div>
                             <div class="form-field" style="flex: 1;">
                                 <label for="financialAmount">Amount (₹)</label>
-                                <input type="number" id="financialAmount" min="1" step="50" placeholder="e.g. 1000" required class="view-select">
+                                <input type="number" id="financialAmount" min="0.01" step="any" placeholder="e.g. 1000" required class="view-select">
                             </div>
                             <div class="form-field" style="flex: 1;">
                                 <label for="financialDate">Date</label>
@@ -1002,7 +1002,7 @@
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <div style="position: relative;">
                                 <span style="position: absolute; left: 10px; top: 9px; color: var(--text-secondary); font-weight: 600;">₹</span>
-                                <input type="number" id="monthLoanDeductionInput" min="0" placeholder="0" style="width: 120px; padding-left: 24px;" class="view-select">
+                                <input type="number" id="monthLoanDeductionInput" min="0" step="any" placeholder="0" style="width: 120px; padding-left: 24px;" class="view-select">
                             </div>
                             <button type="button" class="btn btn-primary" id="saveMonthlyDeductionBtn">Save</button>
                         </div>
