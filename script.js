@@ -2830,6 +2830,72 @@ function downloadSingleSalarySlipPDF(empName, monthKey) {
     }
 }
 
+function renderCompactCardHTML(emp, calc) {
+    return `
+        <div style="border: 1px solid #000; border-radius: 4px; padding: 6px 8px; background: #fff; color: #000; font-size: 10px; box-sizing: border-box;">
+            <div style="font-weight: bold; font-size: 11px; border-bottom: 1px dashed #000; padding-bottom: 3px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${escapeHtml(emp.name || emp.id)} <span style="font-weight: normal; font-size: 9px; color: #333;">(${escapeHtml(emp.id)})</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="color: #444;">Base:</span>
+                <span style="font-weight: 600;">₹${calc.baseSalary.toLocaleString("en-IN")}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="color: #444;">Present:</span>
+                <span>${calc.presentDays}/${calc.daysInMonth} d</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="color: #444;">Abs Cut:</span>
+                <span>-₹${calc.absentSalaryCut.toLocaleString("en-IN")}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="color: #444;">Hrs Cut:</span>
+                <span>-₹${calc.hoursSalaryCut.toLocaleString("en-IN")}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="color: #444;">Adv/Loan:</span>
+                <span>-₹${(calc.advanceDeduction + calc.loanDeduction).toLocaleString("en-IN")}</span>
+            </div>
+            <div style="font-weight: bold; font-size: 11px; border-top: 1px solid #000; margin-top: 4px; padding-top: 3px; display: flex; justify-content: space-between; color: #000;">
+                <span>NET:</span>
+                <span>₹${calc.netSalary.toLocaleString("en-IN")}</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderCardsGridHalf(employeeChunk, calcMap, copyLabel, monthKey) {
+    let cardsHTML = employeeChunk.map(emp => renderCompactCardHTML(emp, calcMap[emp.id])).join('');
+    return `
+        <div style="padding: 10px 14px; box-sizing: border-box;">
+            <div style="text-align: center; font-weight: bold; font-size: 13px; text-transform: uppercase; border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 10px; color: #000;">
+                SALARY PAYSLIPS — ${copyLabel} (${monthKey})
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                ${cardsHTML}
+            </div>
+        </div>
+    `;
+}
+
+function renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey) {
+    const chunkSize = 15;
+    let combinedHTML = "";
+    for (let i = 0; i < sortedEmployees.length; i += chunkSize) {
+        const chunk = sortedEmployees.slice(i, i + chunkSize);
+        combinedHTML += `
+            <div class="a4-page-sheet" style="padding: 10px 0; background: #ffffff; color: #000000; font-family: sans-serif;">
+                ${renderCardsGridHalf(chunk, calcMap, "EMPLOYER COPY", monthKey)}
+                <div style="border-top: 1.5px dashed #000; margin: 12px 0; padding: 4px 0; text-align: center; font-size: 10px; font-weight: bold; color: #000;">
+                    ✂ CUT ALONG DOTTED LINE — (TOP: EMPLOYER COPY / BOTTOM: EMPLOYEE COPY) ✂
+                </div>
+                ${renderCardsGridHalf(chunk, calcMap, "EMPLOYEE COPY", monthKey)}
+            </div>
+        `;
+    }
+    return combinedHTML;
+}
+
 async function handleDownloadAllPayslips() {
     const selectedYear = masterSalaryYear?.value;
     const selectedMonth = masterSalaryMonth?.value;
@@ -2855,17 +2921,17 @@ async function handleDownloadAllPayslips() {
 
         const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-        let combinedHTML = "";
-        sortedEmployees.forEach((emp) => {
+        const calcMap = {};
+        sortedEmployees.forEach(emp => {
             const card = attendanceMap[`${emp.id}_${monthKey}`];
-            const calc = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
-            combinedHTML += renderEmployeeA4SheetHTML(emp, selectedYear, selectedMonth, calc);
+            calcMap[emp.id] = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
         });
 
-        salarySlipPrintArea.innerHTML = combinedHTML;
+        salarySlipPrintArea.innerHTML = renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey);
         salarySlipModal.dataset.mode = "all";
         salarySlipModal.dataset.monthKey = monthKey;
-        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${sortedEmployees.length} Sheets`;
+        const totalPages = Math.ceil(sortedEmployees.length / 15);
+        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${totalPages} Sheet(s)`;
         salarySlipModal.classList.remove("hidden");
 
         // Download multi-page PDF
@@ -2921,17 +2987,17 @@ async function handlePrintAllPayslips() {
 
         const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-        let combinedHTML = "";
-        sortedEmployees.forEach((emp) => {
+        const calcMap = {};
+        sortedEmployees.forEach(emp => {
             const card = attendanceMap[`${emp.id}_${monthKey}`];
-            const calc = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
-            combinedHTML += renderEmployeeA4SheetHTML(emp, selectedYear, selectedMonth, calc);
+            calcMap[emp.id] = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
         });
 
-        salarySlipPrintArea.innerHTML = combinedHTML;
+        salarySlipPrintArea.innerHTML = renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey);
         salarySlipModal.dataset.mode = "all";
         salarySlipModal.dataset.monthKey = monthKey;
-        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${sortedEmployees.length} Sheets`;
+        const totalPages = Math.ceil(sortedEmployees.length / 15);
+        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${totalPages} Sheet(s)`;
         salarySlipModal.classList.remove("hidden");
 
         setTimeout(() => {
