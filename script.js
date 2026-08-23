@@ -2832,32 +2832,23 @@ function downloadSingleSalarySlipPDF(empName, monthKey) {
 
 function renderCompactCardHTML(emp, calc) {
     return `
-        <div style="border: 1px solid #000; border-radius: 4px; padding: 5px 6px; background: #fff; color: #000; font-size: 9.5px; box-sizing: border-box;">
-            <div style="font-weight: bold; font-size: 10.5px; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${escapeHtml(emp.name || emp.id)} <span style="font-weight: normal; font-size: 8.5px; color: #333;">(${escapeHtml(emp.id)})</span>
+        <div style="border: 1px solid #000; border-radius: 3px; padding: 4px 5px; background: #fff; color: #000; font-size: 9px; box-sizing: border-box; font-family: sans-serif; line-height: 1.25;">
+            <div style="font-weight: bold; font-size: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">
+                ${escapeHtml(emp.name || emp.id)} <span style="font-weight: normal; font-size: 8px; color: #333;">(${escapeHtml(emp.id)})</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-                <span style="color: #444;">Base:</span>
-                <span style="font-weight: 600;">₹${calc.baseSalary.toLocaleString("en-IN")}</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px; color: #000;">
+                <span>Base: ₹${calc.baseSalary.toLocaleString("en-IN")}</span>
+                <span>Att: ${calc.presentDays}/${calc.daysInMonth}d</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-                <span style="color: #444;">Present:</span>
-                <span>${calc.presentDays}/${calc.daysInMonth} d</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px; color: #000;">
+                <span>Abs: -₹${calc.absentSalaryCut.toLocaleString("en-IN")}</span>
+                <span>Hrs: -₹${calc.hoursSalaryCut.toLocaleString("en-IN")}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-                <span style="color: #444;">Abs Cut:</span>
-                <span>-₹${calc.absentSalaryCut.toLocaleString("en-IN")}</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px; color: #000;">
+                <span>Adv/Loan: -₹${(calc.advanceDeduction + calc.loanDeduction).toLocaleString("en-IN")}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-                <span style="color: #444;">Hrs Cut:</span>
-                <span>-₹${calc.hoursSalaryCut.toLocaleString("en-IN")}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-                <span style="color: #444;">Adv/Loan:</span>
-                <span>-₹${(calc.advanceDeduction + calc.loanDeduction).toLocaleString("en-IN")}</span>
-            </div>
-            <div style="font-weight: bold; font-size: 10.5px; border-top: 1px solid #000; margin-top: 3px; padding-top: 2px; display: flex; justify-content: space-between; color: #000;">
-                <span>NET:</span>
+            <div style="font-weight: bold; font-size: 9.5px; border-top: 1px solid #000; margin-top: 2px; padding-top: 1px; display: flex; justify-content: space-between; color: #000;">
+                <span>NET PAY:</span>
                 <span>₹${calc.netSalary.toLocaleString("en-IN")}</span>
             </div>
         </div>
@@ -2867,11 +2858,11 @@ function renderCompactCardHTML(emp, calc) {
 function renderCardsGridHalf(employeeChunk, calcMap, copyLabel, monthKey) {
     let cardsHTML = employeeChunk.map(emp => renderCompactCardHTML(emp, calcMap[emp.id])).join('');
     return `
-        <div style="padding: 6px 10px; box-sizing: border-box;">
-            <div style="text-align: center; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 1.5px solid #000; padding-bottom: 3px; margin-bottom: 6px; color: #000;">
+        <div style="padding: 4px 8px; box-sizing: border-box;">
+            <div style="text-align: center; font-weight: bold; font-size: 11px; text-transform: uppercase; border-bottom: 1.5px solid #000; padding-bottom: 2px; margin-bottom: 4px; color: #000;">
                 SALARY PAYSLIPS — ${copyLabel} (${monthKey})
             </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
                 ${cardsHTML}
             </div>
         </div>
@@ -2879,14 +2870,14 @@ function renderCardsGridHalf(employeeChunk, calcMap, copyLabel, monthKey) {
 }
 
 function renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey) {
-    const chunkSize = 20;
+    const chunkSize = 24;
     let combinedHTML = "";
     for (let i = 0; i < sortedEmployees.length; i += chunkSize) {
         const chunk = sortedEmployees.slice(i, i + chunkSize);
         combinedHTML += `
-            <div class="a4-page-sheet" style="padding: 6px 0; background: #ffffff; color: #000000; font-family: sans-serif;">
+            <div class="a4-page-sheet" style="padding: 4px 0; background: #ffffff; color: #000000; font-family: sans-serif; box-sizing: border-box;">
                 ${renderCardsGridHalf(chunk, calcMap, "EMPLOYER COPY", monthKey)}
-                <div style="border-top: 1.5px dashed #000; margin: 8px 0; padding: 2px 0; text-align: center; font-size: 9.5px; font-weight: bold; color: #000;">
+                <div style="border-top: 1.5px dashed #000; margin: 6px 0; padding: 2px 0; text-align: center; font-size: 9px; font-weight: bold; color: #000;">
                     ✂ CUT ALONG DOTTED LINE — (TOP: EMPLOYER COPY / BOTTOM: EMPLOYEE COPY) ✂
                 </div>
                 ${renderCardsGridHalf(chunk, calcMap, "EMPLOYEE COPY", monthKey)}
@@ -2930,7 +2921,7 @@ async function handleDownloadAllPayslips() {
         salarySlipPrintArea.innerHTML = renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey);
         salarySlipModal.dataset.mode = "all";
         salarySlipModal.dataset.monthKey = monthKey;
-        const totalPages = Math.ceil(sortedEmployees.length / 20);
+        const totalPages = Math.ceil(sortedEmployees.length / 24);
         slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${totalPages} Sheet(s)`;
         salarySlipModal.classList.remove("hidden");
 
@@ -2996,7 +2987,7 @@ async function handlePrintAllPayslips() {
         salarySlipPrintArea.innerHTML = renderAllEmployeesCompactSheetsHTML(sortedEmployees, calcMap, monthKey);
         salarySlipModal.dataset.mode = "all";
         salarySlipModal.dataset.monthKey = monthKey;
-        const totalPages = Math.ceil(sortedEmployees.length / 20);
+        const totalPages = Math.ceil(sortedEmployees.length / 24);
         slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${totalPages} Sheet(s)`;
         salarySlipModal.classList.remove("hidden");
 
