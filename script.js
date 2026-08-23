@@ -2013,6 +2013,21 @@ function populateMasterDateSelectors() {
 // ========================================================
 // SALARY & PAYROLL CALCULATION ENGINE (Updated Formulas)
 // ========================================================
+function calculateMissedMinutes(inStr, outStr, dayRecord = null) {
+    if (!inStr) return 0;
+    try {
+        const actualOut = outStr || (dayRecord && dayRecord.out) || "17:30";
+        const workedHours = dayRecord && dayRecord.hours !== undefined && !isNaN(Number(dayRecord.hours))
+            ? Number(dayRecord.hours)
+            : computeHours(inStr, actualOut);
+        const workedMinutes = Math.round(workedHours * 60);
+        return Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+    } catch (e) {
+        console.warn("Error calculating missed minutes for", inStr, outStr, e);
+        return 0;
+    }
+}
+
 function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     const daysInMonth = getDaysInMonth(Number(year), Number(month));
     const baseSalary = Number(emp.salary || 0);
@@ -2643,7 +2658,7 @@ async function handleDeleteFinancialRecord(empId, recId) {
  * Returns HTML for one half of a payslip (either Employer Copy or Employee Copy)
  */
 function renderSingleSlipHalfHTML(emp, year, month, calc, copyLabel) {
-    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const monthName = monthNames[Number(month) - 1];
     const companyName = document.getElementById("companyNameDisplay")?.textContent || "Company";
     const companyLogo = document.getElementById("companyLogoDisplay")?.src || "Email_logo-removebg-preview.png";
@@ -2952,7 +2967,7 @@ function openViewAttendanceModal() {
         viewYear.appendChild(opt);
     }
 
-    const monthNames = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+    const monthNames = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
     monthNames.forEach((m, idx) => {
         const opt = document.createElement("option");
         opt.value = m;
@@ -2970,7 +2985,7 @@ function closeViewAttendanceModal() {
 }
 
 async function loadViewAttendance() {
-    const selectedYear  = document.getElementById("viewYear").value;
+    const selectedYear = document.getElementById("viewYear").value;
     const selectedMonth = document.getElementById("viewMonth").value;
 
     if (!selectedYear || !selectedMonth) {
@@ -3000,10 +3015,10 @@ async function loadViewAttendance() {
         attendanceSnap.forEach(d => { attendanceMap[d.id] = d.data(); });
 
         // ── Build table ──────────────────────────────────────────
-        const year       = Number(selectedYear);
-        const monthNum   = Number(selectedMonth);
+        const year = Number(selectedYear);
+        const monthNum = Number(selectedMonth);
         const daysInMonth = getDaysInMonth(year, monthNum);
-        const todayStr   = getTodayString();
+        const todayStr = getTodayString();
 
         // Totals per employee
         const totals = empList.map(() => ({ present: 0, absent: 0, missedMinutes: 0 }));
@@ -3021,11 +3036,11 @@ async function loadViewAttendance() {
         let bodyRows = "";
 
         for (let d = 1; d <= daysInMonth; d++) {
-            const paddedDay  = String(d).padStart(2, "0");
+            const paddedDay = String(d).padStart(2, "0");
             const fullDateStr = `${selectedYear}-${selectedMonth}-${paddedDay}`;
             if (fullDateStr > todayStr) continue; // skip future
 
-            const dayKey  = String(d);
+            const dayKey = String(d);
             const dateObj = new Date(year, monthNum - 1, d);
             const isSunday = dateObj.getDay() === 0;
 
@@ -3034,14 +3049,14 @@ async function loadViewAttendance() {
 
             let cells = "";
             empList.forEach((emp, idx) => {
-                const card    = attendanceMap[`${emp.id}_${monthKey}`];
-                const rec     = card?.attendance?.[dayKey] || null;
+                const card = attendanceMap[`${emp.id}_${monthKey}`];
+                const rec = card?.attendance?.[dayKey] || null;
                 const isEdited = !!(rec?.editNote);
 
                 let inVal = "—", outVal = "—", missedVal = "—";
                 let cellClass = "";
-                let editAttr  = "";
-                let editIcon  = "";
+                let editAttr = "";
+                let editIcon = "";
 
                 if (isSunday && !rec) {
                     inVal = "Sunday"; outVal = "Sunday"; missedVal = "—";
@@ -3052,7 +3067,7 @@ async function loadViewAttendance() {
                         cellClass = isEdited ? "cell-absent cell-edited" : "cell-absent";
                         if (!isSunday) totals[idx].absent++;
                     } else if (rec.Status === "P") {
-                        inVal  = rec.in  || "—";
+                        inVal = rec.in || "—";
                         // auto = no out in DB; manual = out exists in DB
                         let isAuto = !rec.out;
                         let actualOut = rec.out || "17:30";
@@ -3112,17 +3127,17 @@ async function loadViewAttendance() {
         }
 
         // ── Summary rows ─────────────────────────────────────────
-        let summaryPresent  = `<tr class="summary-row"><td class="summary-label">✅ Total Present</td>`;
-        let summaryAbsent   = `<tr class="summary-row"><td class="summary-label">❌ Total Absent</td>`;
-        let summaryMissed   = `<tr class="summary-row"><td class="summary-label">⏱ Hrs Missed</td>`;
+        let summaryPresent = `<tr class="summary-row"><td class="summary-label">✅ Total Present</td>`;
+        let summaryAbsent = `<tr class="summary-row"><td class="summary-label">❌ Total Absent</td>`;
+        let summaryMissed = `<tr class="summary-row"><td class="summary-label">⏱ Hrs Missed</td>`;
         totals.forEach(t => {
             summaryPresent += `<td colspan="2" class="summary-val">${t.present}</td><td colspan="2"></td>`;
-            summaryAbsent  += `<td colspan="2" class="summary-val">${t.absent}</td><td colspan="2"></td>`;
-            summaryMissed  += `<td colspan="3" class="summary-val missed-val">${formatMinutes(t.missedMinutes)}</td><td></td>`;
+            summaryAbsent += `<td colspan="2" class="summary-val">${t.absent}</td><td colspan="2"></td>`;
+            summaryMissed += `<td colspan="3" class="summary-val missed-val">${formatMinutes(t.missedMinutes)}</td><td></td>`;
         });
         summaryPresent += `</tr>`;
-        summaryAbsent  += `</tr>`;
-        summaryMissed  += `</tr>`;
+        summaryAbsent += `</tr>`;
+        summaryMissed += `</tr>`;
 
         const tableHtml = `
             <div class="view-table-month-label">
@@ -3155,7 +3170,7 @@ async function loadViewAttendance() {
         wrap.querySelectorAll(".cell-edited").forEach(cell => {
             cell.style.cursor = "pointer";
             cell.addEventListener("click", (e) => {
-                const row   = cell.closest("tr");
+                const row = cell.closest("tr");
                 const badge = row?.querySelector(".edited-badge");
                 if (badge) badge.click();
             });
