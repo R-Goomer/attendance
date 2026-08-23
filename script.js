@@ -206,6 +206,36 @@ const deleteAccountError = document.getElementById("deleteAccountError");
 const deleteAccountErrorText = document.getElementById("deleteAccountErrorText");
 const deleteAccountLoading = document.getElementById("deleteAccountLoading");
 
+// Master Mode Elements & State
+const MASTER_PASSWORD = "qwertyuiop";
+let isMasterUnlocked = false;
+
+const masterBtn = document.getElementById("masterBtn");
+const masterAuthModal = document.getElementById("masterAuthModal");
+const masterAuthOverlay = document.getElementById("masterAuthOverlay");
+const masterAuthClose = document.getElementById("masterAuthClose");
+const cancelMasterAuth = document.getElementById("cancelMasterAuth");
+const masterAuthForm = document.getElementById("masterAuthForm");
+const masterPasswordInput = document.getElementById("masterPasswordInput");
+const toggleMasterPassword = document.getElementById("toggleMasterPassword");
+const masterEyeIcon = document.getElementById("masterEyeIcon");
+const masterAuthError = document.getElementById("masterAuthError");
+const masterAuthErrorText = document.getElementById("masterAuthErrorText");
+
+const masterSettingsModal = document.getElementById("masterSettingsModal");
+const masterSettingsOverlay = document.getElementById("masterSettingsOverlay");
+const masterSettingsClose = document.getElementById("masterSettingsClose");
+const lockMasterBtn = document.getElementById("lockMasterBtn");
+const tabMasterDownload = document.getElementById("tabMasterDownload");
+const tabMasterEmployees = document.getElementById("tabMasterEmployees");
+const masterSectionDownload = document.getElementById("masterSectionDownload");
+const masterSectionEmployees = document.getElementById("masterSectionEmployees");
+const masterDownloadYear = document.getElementById("masterDownloadYear");
+const masterDownloadMonth = document.getElementById("masterDownloadMonth");
+const masterDownloadActionBtn = document.getElementById("masterDownloadActionBtn");
+const masterEmployeeSearch = document.getElementById("masterEmployeeSearch");
+const masterEmployeesTableBody = document.getElementById("masterEmployeesTableBody");
+
 let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
 let editExistingTime = null;
 let editExistingAction = null;
@@ -943,8 +973,8 @@ function setupApp() {
 
 
 async function downloadAttendanceForMonth() {
-    const selectedYear  = document.getElementById("viewYear").value;
-    const selectedMonth = document.getElementById("viewMonth").value;
+    const selectedYear = document.getElementById("masterDownloadYear")?.value || document.getElementById("viewYear")?.value;
+    const selectedMonth = document.getElementById("masterDownloadMonth")?.value || document.getElementById("viewMonth")?.value;
 
     if (!selectedYear || !selectedMonth) {
         showToast("❌ Select both year and month");
@@ -1505,7 +1535,8 @@ async function handleAddEmployee(event) {
 }
 
 async function deleteEmployee(employee) {
-    if (!confirm(`Delete ${employee.name}? This action cannot be undone.`)) {
+    const empDisplayName = employee.name || employee.id;
+    if (!confirm(`Delete employee "${empDisplayName}" (${employee.id})? This action cannot be undone.`)) {
         return;
     }
 
@@ -1513,7 +1544,8 @@ async function deleteEmployee(employee) {
         await deleteDoc(employeeDocRef(employee.id));
         employees = employees.filter((current) => current.id !== employee.id);
         renderEmployees();
-        showToast(`✓ Employee ${employee.name} deleted`);
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+        showToast(`✓ Employee ${empDisplayName} deleted`);
     } catch (error) {
         console.error("Error deleting employee:", error);
         showToast("❌ Error: Could not delete employee. Check Firebase setup.");
@@ -1546,12 +1578,6 @@ function createEmployeeCard(employee) {
     card.className = "employee-card";
 
     card.innerHTML = `
-        <div class="card-header">
-            <div></div>
-            <button class="card-delete-btn" data-employee-id="${escapeHtml(employee.id)}" title="Delete employee">
-                🗑️
-            </button>
-        </div>
         <div class="card-clickable-area">
             <div class="card-info">
                 <div class="employee-name">${escapeHtml(employee.name)} <span class="employee-id">(${escapeHtml(employee.id)})</span></div>
@@ -1564,16 +1590,8 @@ function createEmployeeCard(employee) {
         </div>
     `;
 
-    card.addEventListener("click", (event) => {
-        if (!event.target.closest(".card-delete-btn")) {
-            openAttendanceModal(employee);
-        }
-    });
-
-    const deleteBtn = card.querySelector(".card-delete-btn");
-    deleteBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        deleteEmployee(employee);
+    card.addEventListener("click", () => {
+        openAttendanceModal(employee);
     });
 
     return card;
@@ -1715,13 +1733,30 @@ function setupEventListeners() {
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
-    document.getElementById("viewDownloadBtn").addEventListener("click", downloadAttendanceForMonth);
 
     // View Attendance button
     document.getElementById("viewAttendanceBtn").addEventListener("click", openViewAttendanceModal);
     document.getElementById("viewAttendanceClose").addEventListener("click", closeViewAttendanceModal);
     document.getElementById("viewAttendanceOverlay").addEventListener("click", closeViewAttendanceModal);
     document.getElementById("viewLoadBtn").addEventListener("click", loadViewAttendance);
+
+    // Master Mode Listeners
+    masterBtn.addEventListener("click", handleMasterButtonClick);
+    masterAuthClose.addEventListener("click", closeMasterAuthModal);
+    masterAuthOverlay.addEventListener("click", closeMasterAuthModal);
+    cancelMasterAuth.addEventListener("click", closeMasterAuthModal);
+    masterAuthForm.addEventListener("submit", handleMasterAuthSubmit);
+    toggleMasterPassword.addEventListener("click", toggleMasterPasswordVisibility);
+
+    masterSettingsClose.addEventListener("click", closeMasterSettingsModal);
+    masterSettingsOverlay.addEventListener("click", closeMasterSettingsModal);
+    lockMasterBtn.addEventListener("click", lockMasterMode);
+
+    tabMasterDownload.addEventListener("click", () => switchMasterTab("download"));
+    tabMasterEmployees.addEventListener("click", () => switchMasterTab("employees"));
+
+    masterDownloadActionBtn.addEventListener("click", downloadAttendanceForMonth);
+    masterEmployeeSearch.addEventListener("input", (e) => renderMasterEmployeesList(e.target.value));
 
     // Note detail popup
     document.getElementById("noteDetailClose").addEventListener("click", closeNoteDetailPopup);
@@ -1737,7 +1772,186 @@ function setupEventListeners() {
             closeAddEmployeeModal();
             closeViewAttendanceModal();
             closeNoteDetailPopup();
+            closeMasterAuthModal();
+            closeMasterSettingsModal();
         }
+    });
+}
+
+// ========================================================
+// MASTER SETTINGS & AUTH LOGIC
+// ========================================================
+function openMasterAuthModal() {
+    masterAuthError.classList.add("hidden");
+    masterPasswordInput.value = "";
+    masterPasswordInput.type = "password";
+    masterEyeIcon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    masterAuthModal.classList.remove("hidden");
+    setTimeout(() => masterPasswordInput.focus(), 150);
+}
+
+function closeMasterAuthModal() {
+    masterAuthModal.classList.add("hidden");
+    masterPasswordInput.value = "";
+    masterAuthError.classList.add("hidden");
+}
+
+function openMasterSettingsModal() {
+    populateMasterDateSelectors();
+    renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+    masterSettingsModal.classList.remove("hidden");
+}
+
+function closeMasterSettingsModal() {
+    masterSettingsModal.classList.add("hidden");
+}
+
+function lockMasterMode() {
+    isMasterUnlocked = false;
+    closeMasterSettingsModal();
+    showToast("🔒 Master mode locked");
+}
+
+function handleMasterButtonClick() {
+    if (isMasterUnlocked) {
+        openMasterSettingsModal();
+    } else {
+        openMasterAuthModal();
+    }
+}
+
+function handleMasterAuthSubmit(event) {
+    event.preventDefault();
+    const enteredPassword = masterPasswordInput.value.trim();
+    if (enteredPassword === MASTER_PASSWORD) {
+        isMasterUnlocked = true;
+        closeMasterAuthModal();
+        openMasterSettingsModal();
+        showToast("🔓 Master access granted");
+    } else {
+        masterAuthErrorText.textContent = "Incorrect master password. Please try again.";
+        masterAuthError.classList.remove("hidden");
+        const formCard = masterAuthModal.querySelector(".master-auth-modal-content");
+        if (formCard) {
+            formCard.classList.remove("shake-input");
+            void formCard.offsetWidth; // trigger reflow
+            formCard.classList.add("shake-input");
+        }
+        masterPasswordInput.value = "";
+        masterPasswordInput.focus();
+    }
+}
+
+function toggleMasterPasswordVisibility() {
+    if (masterPasswordInput.type === "password") {
+        masterPasswordInput.type = "text";
+        masterEyeIcon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+    } else {
+        masterPasswordInput.type = "password";
+        masterEyeIcon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    }
+}
+
+function switchMasterTab(tabName) {
+    if (tabName === "download") {
+        tabMasterDownload.classList.add("active");
+        tabMasterEmployees.classList.remove("active");
+        masterSectionDownload.classList.remove("hidden");
+        masterSectionEmployees.classList.add("hidden");
+    } else if (tabName === "employees") {
+        tabMasterDownload.classList.remove("active");
+        tabMasterEmployees.classList.add("active");
+        masterSectionDownload.classList.add("hidden");
+        masterSectionEmployees.classList.remove("hidden");
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+    }
+}
+
+function populateMasterDateSelectors() {
+    const yearSelect = document.getElementById("masterDownloadYear");
+    const monthSelect = document.getElementById("masterDownloadMonth");
+    if (!yearSelect || !monthSelect) return;
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = String(currentDate.getMonth() + 1).padStart(2, "0");
+
+    yearSelect.innerHTML = "";
+    for (let y = currentYear + 1; y >= currentYear - 3; y--) {
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        if (y === currentYear) opt.selected = true;
+        yearSelect.appendChild(opt);
+    }
+
+    monthSelect.innerHTML = "";
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    monthNames.forEach((name, i) => {
+        const val = String(i + 1).padStart(2, "0");
+        const opt = document.createElement("option");
+        opt.value = val;
+        opt.textContent = `${val} - ${name}`;
+        if (val === currentMonth) opt.selected = true;
+        monthSelect.appendChild(opt);
+    });
+}
+
+function renderMasterEmployeesList(filterQuery = "") {
+    const tbody = document.getElementById("masterEmployeesTableBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    const queryLower = (filterQuery || "").trim().toLowerCase();
+    const filtered = employees.filter((emp) => {
+        if (!queryLower) return true;
+        return (
+            (emp.id && emp.id.toLowerCase().includes(queryLower)) ||
+            (emp.name && emp.name.toLowerCase().includes(queryLower)) ||
+            (emp.jobTitle && emp.jobTitle.toLowerCase().includes(queryLower))
+        );
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 24px;">
+                    ${employees.length === 0 ? "No employees registered." : "No employees match your search."}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    filtered.forEach((emp) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><span class="master-emp-id-badge">${escapeHtml(emp.id)}</span></td>
+            <td style="font-weight: 600;">${escapeHtml(emp.name || emp.id)}</td>
+            <td style="color: var(--text-secondary);">${escapeHtml(emp.jobTitle || "Employee")}</td>
+            <td style="text-align: right;">
+                <button class="btn-delete-emp-master" data-emp-id="${escapeHtml(emp.id)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                        <path d="M10 11v6"></path>
+                        <path d="M14 11v6"></path>
+                    </svg>
+                    Delete
+                </button>
+            </td>
+        `;
+
+        const delBtn = tr.querySelector(".btn-delete-emp-master");
+        delBtn.addEventListener("click", () => {
+            deleteEmployee(emp);
+        });
+
+        tbody.appendChild(tr);
     });
 }
 
