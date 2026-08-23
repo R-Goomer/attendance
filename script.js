@@ -1016,9 +1016,12 @@ async function downloadAttendanceForMonth() {
                         }
                     } else {
                         inValue = dayRecord.in || "";
-                        outValue = dayRecord.defaultOut
-                            ? `${dayRecord.out || "17:30"} (default)`
-                            : (dayRecord.out || "");
+                        // auto = no out in DB; manual = out exists in DB
+                        let isAuto = !dayRecord.out;
+                        let actualOut = dayRecord.out || "17:30";
+                        outValue = isAuto
+                            ? `${actualOut} (auto)`
+                            : actualOut;
                         if (dayRecord.Status === "P") {
                             totals[idx].present += 1;
                         }
@@ -1199,7 +1202,9 @@ async function showTimePicker(action) {
 
         // If user already checked OUT and clicked OUT, show in-UI edit prompt
         // But if the existing OUT is only a default (auto-set), skip the prompt and go straight to picker
-        if (action === "OUT" && dayRecord?.out && !dayRecord?.defaultOut) {
+        // auto = no out in DB; manual = out exists in DB
+        let isAutoOut = !dayRecord?.out;
+        if (action === "OUT" && dayRecord?.out && !isAutoOut) {
             editExistingTime = dayRecord.out;
             editExistingAction = "OUT";
             editPromptText.textContent = `Already checked OUT at ${dayRecord.out}. Do you want to edit check-out time?`;
@@ -1388,12 +1393,14 @@ async function submitTimeSelection() {
         dayRecord.Status = "P";
         if (action === "IN") {
             dayRecord.in = timeString;
-            // Set default OUT to 17:30 until user manually overrides it
-            dayRecord.out = "17:30";
+            // Mark as auto and do NOT save 17:30 to DB
+            delete dayRecord.out;
+            dayRecord.outType = "auto";
             dayRecord.defaultOut = true;
             dayRecord.hours = computeHours(timeString, "17:30");
         } else {
             dayRecord.out = timeString;
+            dayRecord.outType = "manual";
             dayRecord.hours = computeHours(dayRecord.in, dayRecord.out);
             // Clear the default flag — user has now manually set OUT
             delete dayRecord.defaultOut;
@@ -1859,9 +1866,12 @@ async function loadViewAttendance() {
                         if (!isSunday) totals[idx].absent++;
                     } else if (rec.Status === "P") {
                         inVal  = rec.in  || "—";
-                        outVal = rec.defaultOut
-                            ? `<span title="Default OUT — not manually confirmed" class="default-out">${rec.out || "17:30"}*</span>`
-                            : (rec.out || "—");
+                        // auto = no out in DB; manual = out exists in DB
+                        let isAuto = !rec.out;
+                        let actualOut = rec.out || "17:30";
+                        outVal = isAuto
+                            ? `<span title="Auto OUT — not manually confirmed" class="default-out">${actualOut}*<br><span style="font-size: 0.85em; opacity: 0.8">(auto)</span></span>`
+                            : actualOut;
                         cellClass = isEdited ? "cell-present cell-edited" : "cell-present";
                         totals[idx].present++;
 
