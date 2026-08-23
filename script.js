@@ -6,6 +6,7 @@ import {
     getDoc,
     getDocs,
     setDoc,
+    updateDoc,
     deleteDoc,
     query,
     where,
@@ -205,6 +206,97 @@ const deleteReauthSection = document.getElementById("deleteReauthSection");
 const deleteAccountError = document.getElementById("deleteAccountError");
 const deleteAccountErrorText = document.getElementById("deleteAccountErrorText");
 const deleteAccountLoading = document.getElementById("deleteAccountLoading");
+
+// Master Mode Elements & State
+const MASTER_PASSWORD = "qwertyuiop";
+let isMasterUnlocked = false;
+
+const masterBtn = document.getElementById("masterBtn");
+const masterAuthModal = document.getElementById("masterAuthModal");
+const masterAuthOverlay = document.getElementById("masterAuthOverlay");
+const masterAuthClose = document.getElementById("masterAuthClose");
+const cancelMasterAuth = document.getElementById("cancelMasterAuth");
+const masterAuthForm = document.getElementById("masterAuthForm");
+const masterPasswordInput = document.getElementById("masterPasswordInput");
+const toggleMasterPassword = document.getElementById("toggleMasterPassword");
+const masterEyeIcon = document.getElementById("masterEyeIcon");
+const masterAuthError = document.getElementById("masterAuthError");
+const masterAuthErrorText = document.getElementById("masterAuthErrorText");
+
+const masterSettingsModal = document.getElementById("masterSettingsModal");
+const masterSettingsOverlay = document.getElementById("masterSettingsOverlay");
+const masterSettingsClose = document.getElementById("masterSettingsClose");
+const lockMasterBtn = document.getElementById("lockMasterBtn");
+
+// Master Navigation Tabs & Sections
+const tabMasterSalary = document.getElementById("tabMasterSalary");
+const tabMasterEmployees = document.getElementById("tabMasterEmployees");
+const tabMasterDownload = document.getElementById("tabMasterDownload");
+const masterSectionSalary = document.getElementById("masterSectionSalary");
+const masterSectionEmployees = document.getElementById("masterSectionEmployees");
+const masterSectionDownload = document.getElementById("masterSectionDownload");
+
+// Master Salary & Payroll Controls
+const masterSalaryYear = document.getElementById("masterSalaryYear");
+const masterSalaryMonth = document.getElementById("masterSalaryMonth");
+const masterRefreshSalaryBtn = document.getElementById("masterRefreshSalaryBtn");
+const masterDownloadAllSlipsBtn = document.getElementById("masterDownloadAllSlipsBtn");
+const masterPrintAllSlipsBtn = document.getElementById("masterPrintAllSlipsBtn");
+const statTotalBaseSalary = document.getElementById("statTotalBaseSalary");
+const statTotalAttendanceCuts = document.getElementById("statTotalAttendanceCuts");
+const statTotalLoanAdvDeductions = document.getElementById("statTotalLoanAdvDeductions");
+const statTotalNetPayout = document.getElementById("statTotalNetPayout");
+const masterSalaryTableBody = document.getElementById("masterSalaryTableBody");
+
+// Master Employees & Download Controls
+const masterEmployeeSearch = document.getElementById("masterEmployeeSearch");
+const masterEmployeesTableBody = document.getElementById("masterEmployeesTableBody");
+const masterDownloadYear = document.getElementById("masterDownloadYear");
+const masterDownloadMonth = document.getElementById("masterDownloadMonth");
+const masterDownloadActionBtn = document.getElementById("masterDownloadActionBtn");
+
+// Edit Base Salary & Deduction Rules Modal Elements
+const editSalaryModal = document.getElementById("editSalaryModal");
+const editSalaryOverlay = document.getElementById("editSalaryOverlay");
+const editSalaryClose = document.getElementById("editSalaryClose");
+const cancelEditSalary = document.getElementById("cancelEditSalary");
+const editSalaryForm = document.getElementById("editSalaryForm");
+const editSalaryEmpName = document.getElementById("editSalaryEmpName");
+const editSalaryEmpId = document.getElementById("editSalaryEmpId");
+const editSalaryEmpIdHidden = document.getElementById("editSalaryEmpIdHidden");
+const baseSalaryInput = document.getElementById("baseSalaryInput");
+const hoursDivisorInput = document.getElementById("hoursDivisorInput");
+const penaltyMultiplierInput = document.getElementById("penaltyMultiplierInput");
+
+// Loan & Advance Modal Elements
+const loanAdvanceModal = document.getElementById("loanAdvanceModal");
+const loanAdvanceOverlay = document.getElementById("loanAdvanceOverlay");
+const loanAdvanceClose = document.getElementById("loanAdvanceClose");
+const loanEmpName = document.getElementById("loanEmpName");
+const loanEmpId = document.getElementById("loanEmpId");
+const loanStatTotalLoans = document.getElementById("loanStatTotalLoans");
+const loanStatTotalRepaid = document.getElementById("loanStatTotalRepaid");
+const loanStatRemainingLoan = document.getElementById("loanStatRemainingLoan");
+const loanStatActiveAdvance = document.getElementById("loanStatActiveAdvance");
+const addFinancialForm = document.getElementById("addFinancialForm");
+const financialEmpIdHidden = document.getElementById("financialEmpIdHidden");
+const financialType = document.getElementById("financialType");
+const financialAmount = document.getElementById("financialAmount");
+const financialDate = document.getElementById("financialDate");
+const financialNote = document.getElementById("financialNote");
+const loanDeductionMonthLabel = document.getElementById("loanDeductionMonthLabel");
+const monthLoanDeductionInput = document.getElementById("monthLoanDeductionInput");
+const saveMonthlyDeductionBtn = document.getElementById("saveMonthlyDeductionBtn");
+const financialHistoryTableBody = document.getElementById("financialHistoryTableBody");
+
+// Salary Slip Modal Elements
+const salarySlipModal = document.getElementById("salarySlipModal");
+const salarySlipOverlay = document.getElementById("salarySlipOverlay");
+const salarySlipClose = document.getElementById("salarySlipClose");
+const downloadPdfBtn = document.getElementById("downloadPdfBtn");
+const printSlipBtn = document.getElementById("printSlipBtn");
+const salarySlipPrintArea = document.getElementById("salarySlipPrintArea");
+const slipModalTitle = document.getElementById("slipModalTitle");
 
 let pendingClockAction = null; // Track which action (IN/OUT) is pending time selection
 let editExistingTime = null;
@@ -943,8 +1035,8 @@ function setupApp() {
 
 
 async function downloadAttendanceForMonth() {
-    const selectedYear  = document.getElementById("viewYear").value;
-    const selectedMonth = document.getElementById("viewMonth").value;
+    const selectedYear = document.getElementById("masterDownloadYear")?.value || document.getElementById("viewYear")?.value;
+    const selectedMonth = document.getElementById("masterDownloadMonth")?.value || document.getElementById("viewMonth")?.value;
 
     if (!selectedYear || !selectedMonth) {
         showToast("❌ Select both year and month");
@@ -1505,7 +1597,8 @@ async function handleAddEmployee(event) {
 }
 
 async function deleteEmployee(employee) {
-    if (!confirm(`Delete ${employee.name}? This action cannot be undone.`)) {
+    const empDisplayName = employee.name || employee.id;
+    if (!confirm(`Delete employee "${empDisplayName}" (${employee.id})? This action cannot be undone.`)) {
         return;
     }
 
@@ -1513,7 +1606,8 @@ async function deleteEmployee(employee) {
         await deleteDoc(employeeDocRef(employee.id));
         employees = employees.filter((current) => current.id !== employee.id);
         renderEmployees();
-        showToast(`✓ Employee ${employee.name} deleted`);
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+        showToast(`✓ Employee ${empDisplayName} deleted`);
     } catch (error) {
         console.error("Error deleting employee:", error);
         showToast("❌ Error: Could not delete employee. Check Firebase setup.");
@@ -1546,12 +1640,6 @@ function createEmployeeCard(employee) {
     card.className = "employee-card";
 
     card.innerHTML = `
-        <div class="card-header">
-            <div></div>
-            <button class="card-delete-btn" data-employee-id="${escapeHtml(employee.id)}" title="Delete employee">
-                🗑️
-            </button>
-        </div>
         <div class="card-clickable-area">
             <div class="card-info">
                 <div class="employee-name">${escapeHtml(employee.name)} <span class="employee-id">(${escapeHtml(employee.id)})</span></div>
@@ -1564,16 +1652,8 @@ function createEmployeeCard(employee) {
         </div>
     `;
 
-    card.addEventListener("click", (event) => {
-        if (!event.target.closest(".card-delete-btn")) {
-            openAttendanceModal(employee);
-        }
-    });
-
-    const deleteBtn = card.querySelector(".card-delete-btn");
-    deleteBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        deleteEmployee(employee);
+    card.addEventListener("click", () => {
+        openAttendanceModal(employee);
     });
 
     return card;
@@ -1715,13 +1795,66 @@ function setupEventListeners() {
     addEmployeeOverlay.addEventListener("click", closeAddEmployeeModal);
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
-    document.getElementById("viewDownloadBtn").addEventListener("click", downloadAttendanceForMonth);
 
-    // View Attendance button
+    // View Attendance modal listeners
     document.getElementById("viewAttendanceBtn").addEventListener("click", openViewAttendanceModal);
     document.getElementById("viewAttendanceClose").addEventListener("click", closeViewAttendanceModal);
     document.getElementById("viewAttendanceOverlay").addEventListener("click", closeViewAttendanceModal);
-    document.getElementById("viewLoadBtn").addEventListener("click", loadViewAttendance);
+    document.getElementById("viewYear").addEventListener("change", loadViewAttendance);
+    document.getElementById("viewMonth").addEventListener("change", loadViewAttendance);
+
+    // Master Mode Listeners
+    masterBtn.addEventListener("click", handleMasterButtonClick);
+    masterAuthClose.addEventListener("click", closeMasterAuthModal);
+    masterAuthOverlay.addEventListener("click", closeMasterAuthModal);
+    cancelMasterAuth.addEventListener("click", closeMasterAuthModal);
+    masterAuthForm.addEventListener("submit", handleMasterAuthSubmit);
+    toggleMasterPassword.addEventListener("click", toggleMasterPasswordVisibility);
+
+    masterSettingsClose.addEventListener("click", closeMasterSettingsModal);
+    masterSettingsOverlay.addEventListener("click", closeMasterSettingsModal);
+    lockMasterBtn.addEventListener("click", lockMasterMode);
+
+    tabMasterSalary.addEventListener("click", () => switchMasterTab("salary"));
+    tabMasterEmployees.addEventListener("click", () => switchMasterTab("employees"));
+    tabMasterDownload.addEventListener("click", () => switchMasterTab("download"));
+
+    masterSalaryYear.addEventListener("change", loadMasterSalaryData);
+    masterSalaryMonth.addEventListener("change", loadMasterSalaryData);
+    masterRefreshSalaryBtn.addEventListener("click", loadMasterSalaryData);
+
+    masterDownloadActionBtn.addEventListener("click", downloadAttendanceForMonth);
+    masterEmployeeSearch.addEventListener("input", (e) => renderMasterEmployeesList(e.target.value));
+
+    // Edit Salary modal listeners
+    editSalaryClose.addEventListener("click", closeEditSalaryModal);
+    editSalaryOverlay.addEventListener("click", closeEditSalaryModal);
+    cancelEditSalary.addEventListener("click", closeEditSalaryModal);
+    editSalaryForm.addEventListener("submit", handleSaveBaseSalary);
+
+    // Loan & Advance modal listeners
+    loanAdvanceClose.addEventListener("click", closeLoanAdvanceModal);
+    loanAdvanceOverlay.addEventListener("click", closeLoanAdvanceModal);
+    addFinancialForm.addEventListener("submit", handleAddFinancialRecord);
+    saveMonthlyDeductionBtn.addEventListener("click", handleSaveMonthlyLoanDeduction);
+
+    // Salary Slip modal listeners
+    salarySlipClose.addEventListener("click", closeSalarySlipModal);
+    salarySlipOverlay.addEventListener("click", closeSalarySlipModal);
+    downloadPdfBtn.addEventListener("click", () => {
+        const mode = salarySlipModal.dataset.mode || "single";
+        const empName = salarySlipModal.dataset.empName || "Employee";
+        const monthKey = salarySlipModal.dataset.monthKey || getTodayString().slice(0, 7);
+        if (mode === "all") {
+            downloadAllSalarySlipsPDF(monthKey.slice(0, 4), monthKey.slice(5, 7));
+        } else {
+            downloadSingleSalarySlipPDF(empName, monthKey);
+        }
+    });
+    printSlipBtn.addEventListener("click", () => window.print());
+
+    masterDownloadAllSlipsBtn.addEventListener("click", handleDownloadAllPayslips);
+    masterPrintAllSlipsBtn.addEventListener("click", handlePrintAllPayslips);
 
     // Note detail popup
     document.getElementById("noteDetailClose").addEventListener("click", closeNoteDetailPopup);
@@ -1737,8 +1870,1078 @@ function setupEventListeners() {
             closeAddEmployeeModal();
             closeViewAttendanceModal();
             closeNoteDetailPopup();
+            closeMasterAuthModal();
+            closeMasterSettingsModal();
+            closeEditSalaryModal();
+            closeLoanAdvanceModal();
+            closeSalarySlipModal();
         }
     });
+}
+
+// ========================================================
+// MASTER SETTINGS & AUTH LOGIC
+// ========================================================
+function openMasterAuthModal() {
+    masterAuthError.classList.add("hidden");
+    masterPasswordInput.value = "";
+    masterPasswordInput.type = "password";
+    masterEyeIcon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    masterAuthModal.classList.remove("hidden");
+    setTimeout(() => masterPasswordInput.focus(), 150);
+}
+
+function closeMasterAuthModal() {
+    masterAuthModal.classList.add("hidden");
+    masterPasswordInput.value = "";
+    masterAuthError.classList.add("hidden");
+}
+
+function openMasterSettingsModal() {
+    populateMasterDateSelectors();
+    switchMasterTab("salary");
+    masterSettingsModal.classList.remove("hidden");
+}
+
+function closeMasterSettingsModal() {
+    masterSettingsModal.classList.add("hidden");
+}
+
+function lockMasterMode() {
+    isMasterUnlocked = false;
+    closeMasterSettingsModal();
+    showToast("🔒 Master mode locked");
+}
+
+function handleMasterButtonClick() {
+    if (isMasterUnlocked) {
+        openMasterSettingsModal();
+    } else {
+        openMasterAuthModal();
+    }
+}
+
+function handleMasterAuthSubmit(event) {
+    event.preventDefault();
+    const enteredPassword = masterPasswordInput.value.trim();
+    if (enteredPassword === MASTER_PASSWORD) {
+        isMasterUnlocked = true;
+        closeMasterAuthModal();
+        openMasterSettingsModal();
+        showToast("🔓 Master access granted");
+    } else {
+        masterAuthErrorText.textContent = "Incorrect master password. Please try again.";
+        masterAuthError.classList.remove("hidden");
+        const formCard = masterAuthModal.querySelector(".master-auth-modal-content");
+        if (formCard) {
+            formCard.classList.remove("shake-input");
+            void formCard.offsetWidth; // trigger reflow
+            formCard.classList.add("shake-input");
+        }
+        masterPasswordInput.value = "";
+        masterPasswordInput.focus();
+    }
+}
+
+function toggleMasterPasswordVisibility() {
+    if (masterPasswordInput.type === "password") {
+        masterPasswordInput.type = "text";
+        masterEyeIcon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+    } else {
+        masterPasswordInput.type = "password";
+        masterEyeIcon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    }
+}
+
+function switchMasterTab(tabName) {
+    tabMasterSalary.classList.toggle("active", tabName === "salary");
+    tabMasterEmployees.classList.toggle("active", tabName === "employees");
+    tabMasterDownload.classList.toggle("active", tabName === "download");
+
+    masterSectionSalary.classList.toggle("hidden", tabName !== "salary");
+    masterSectionEmployees.classList.toggle("hidden", tabName !== "employees");
+    masterSectionDownload.classList.toggle("hidden", tabName !== "download");
+
+    if (tabName === "salary") {
+        loadMasterSalaryData();
+    } else if (tabName === "employees") {
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+    }
+}
+
+function populateMasterDateSelectors() {
+    const yearSelectors = [masterSalaryYear, masterDownloadYear];
+    const monthSelectors = [masterSalaryMonth, masterDownloadMonth];
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = String(currentDate.getMonth() + 1).padStart(2, "0");
+
+    yearSelectors.forEach((sel) => {
+        if (!sel) return;
+        const prevVal = sel.value;
+        sel.innerHTML = "";
+        for (let y = currentYear + 1; y >= currentYear - 3; y--) {
+            const opt = document.createElement("option");
+            opt.value = String(y);
+            opt.textContent = String(y);
+            if (prevVal ? opt.value === prevVal : y === currentYear) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    });
+
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+
+    monthSelectors.forEach((sel) => {
+        if (!sel) return;
+        const prevVal = sel.value;
+        sel.innerHTML = "";
+        monthNames.forEach((name, i) => {
+            const val = String(i + 1).padStart(2, "0");
+            const opt = document.createElement("option");
+            opt.value = val;
+            opt.textContent = `${val} - ${name}`;
+            if (prevVal ? opt.value === prevVal : val === currentMonth) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    });
+}
+
+// ========================================================
+// SALARY & PAYROLL CALCULATION ENGINE (Updated Formulas)
+// ========================================================
+function calculateMissedMinutes(inStr, outStr, dayRecord = null) {
+    if (!inStr) return 0;
+    try {
+        const actualOut = outStr || (dayRecord && dayRecord.out) || "17:30";
+        const workedHours = dayRecord && dayRecord.hours !== undefined && !isNaN(Number(dayRecord.hours))
+            ? Number(dayRecord.hours)
+            : computeHours(inStr, actualOut);
+        const workedMinutes = Math.round(workedHours * 60);
+        return Math.max(0, Math.round(EXPECTED_WORK_MINUTES - workedMinutes));
+    } catch (e) {
+        console.warn("Error calculating missed minutes for", inStr, outStr, e);
+        return 0;
+    }
+}
+
+function calculateEmployeeSalary(emp, year, month, attendanceCard) {
+    const daysInMonth = getDaysInMonth(Number(year), Number(month));
+    const baseSalary = Number(emp.salary || 0);
+
+    // Multipliers (default 208h divisor and 1.25x penalty, customizable per employee)
+    const hoursDivisor = emp.hoursDivider !== undefined && emp.hoursDivider !== "" && !isNaN(Number(emp.hoursDivider)) && Number(emp.hoursDivider) > 0
+        ? Number(emp.hoursDivider)
+        : 208;
+    const penaltyMultiplier = emp.penaltyMultiplier !== undefined && emp.penaltyMultiplier !== "" && !isNaN(Number(emp.penaltyMultiplier))
+        ? Number(emp.penaltyMultiplier)
+        : 1.25;
+
+    // Daily wage = Salary / number of days in the month = 30
+    const dailyWage = baseSalary > 0 ? (baseSalary / 30) : 0;
+
+    // Hourly base rate = Salary / 208 default (editable)
+    const hourlyBaseRate = baseSalary > 0 ? (baseSalary / hoursDivisor) : 0;
+
+    const attendance = attendanceCard?.attendance || {};
+    let presentDays = 0;
+    let actualAbsentDays = 0;
+    let totalMissedMinutes = 0;
+    let totalSundays = 0;
+    let sundayPenalties = 0;
+
+    // Track week-by-week absences (group days Mon-Sun)
+    const weekMap = {};
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(Number(year), Number(month) - 1, d);
+        const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const dayKey = String(d);
+        const dayRecord = attendance[dayKey];
+        const dateStr = `${year}-${month}-${String(d).padStart(2, "0")}`;
+        const isPastOrToday = dateStr <= getTodayString();
+
+        const weekNum = Math.ceil((d + (new Date(Number(year), Number(month) - 1, 1).getDay() || 7) - 1) / 7);
+        if (!weekMap[weekNum]) {
+            weekMap[weekNum] = { weekdayAbsences: 0, sundayDay: null };
+        }
+
+        if (dayOfWeek === 0) {
+            totalSundays++;
+            weekMap[weekNum].sundayDay = d;
+        } else {
+            // Weekday (Mon - Sat)
+            if (dayRecord) {
+                if (dayRecord.Status === "A") {
+                    actualAbsentDays++;
+                    weekMap[weekNum].weekdayAbsences++;
+                } else if (dayRecord.in) {
+                    presentDays++;
+                    const inStr = dayRecord.in;
+                    const outStr = dayRecord.out || dayRecord.defaultOut || "17:30";
+                    const dayMissed = calculateMissedMinutes(inStr, outStr);
+                    totalMissedMinutes += dayMissed;
+                }
+            } else if (isPastOrToday) {
+                actualAbsentDays++;
+                weekMap[weekNum].weekdayAbsences++;
+            }
+        }
+    }
+
+    // Sunday salary cut penalty rule (if 2 or more weekday absences in a week)
+    Object.values(weekMap).forEach((w) => {
+        if (w.weekdayAbsences >= 2 && w.sundayDay !== null) {
+            sundayPenalties++;
+        }
+    });
+
+    const totalAbsentDays = actualAbsentDays + sundayPenalties;
+
+    // absent_salary_cut = daily wage x absent_days
+    const absentSalaryCut = Math.round(totalAbsentDays * dailyWage);
+
+    // hours salary cut = [salary / 208 (multiplier)] * late_hours * penalty (1.25)
+    const totalMissedHours = (totalMissedMinutes / 60);
+    const hoursSalaryCut = Math.round(hourlyBaseRate * totalMissedHours * penaltyMultiplier);
+
+    // monthly_salary / Gross Earned = base salary - absent_salary_cut - hours salary cut
+    const grossEarned = Math.max(0, Math.round(baseSalary - absentSalaryCut - hoursSalaryCut));
+
+    // Loan & Advance Deductions
+    const monthKey = `${year}-${month}`;
+    const financialRecords = Array.isArray(emp.financialRecords) ? emp.financialRecords : [];
+
+    const totalLoanTaken = financialRecords
+        .filter((r) => r.type === "loan")
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    const totalLoanRepaid = financialRecords
+        .filter((r) => r.type === "loan_repayment")
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    const remainingLoanBeforeMonth = Math.max(0, totalLoanTaken - totalLoanRepaid);
+
+    const configuredLoanDeduction = emp.monthlyLoanDeductions?.[monthKey] !== undefined
+        ? Number(emp.monthlyLoanDeductions[monthKey])
+        : 0;
+    const loanDeduction = Math.min(remainingLoanBeforeMonth, configuredLoanDeduction);
+
+    // Advance for this month (deducted definitely in current salary)
+    const activeAdvanceForMonth = financialRecords
+        .filter((r) => r.type === "advance" && !r.repaid && (!r.month || r.month === monthKey))
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const advanceDeduction = activeAdvanceForMonth;
+
+    const remainingLoanAfterMonth = Math.max(0, remainingLoanBeforeMonth - loanDeduction);
+    const netSalary = Math.max(0, Math.round(grossEarned - advanceDeduction - loanDeduction));
+
+    return {
+        baseSalary,
+        daysInMonth,
+        dailyWage,
+        hoursDivisor,
+        penaltyMultiplier,
+        hourlyBaseRate,
+        presentDays,
+        actualAbsentDays,
+        sundayPenalties,
+        totalAbsentDays,
+        absentSalaryCut,
+        totalMissedMinutes,
+        totalMissedHours: totalMissedHours.toFixed(1),
+        hoursSalaryCut,
+        grossEarned,
+        advanceDeduction,
+        loanDeduction,
+        totalLoanTaken,
+        totalLoanRepaid,
+        remainingLoan: remainingLoanAfterMonth,
+        netSalary,
+    };
+}
+
+async function loadMasterSalaryData() {
+    const selectedYear = masterSalaryYear?.value;
+    const selectedMonth = masterSalaryMonth?.value;
+    if (!selectedYear || !selectedMonth) return;
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    masterSalaryTableBody.innerHTML = `
+        <tr>
+            <td colspan="9" style="text-align: center; padding: 28px; color: var(--text-secondary);">
+                <div class="spinner-small" style="margin: 0 auto 10px;"></div>
+                Calculating salary & deductions for ${selectedMonth}/${selectedYear}…
+            </td>
+        </tr>
+    `;
+
+    try {
+        const attendanceQuery = query(
+            attendanceCardsCollectionRef(),
+            where("month", "==", monthKey)
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceMap = {};
+        attendanceSnap.forEach((d) => { attendanceMap[d.id] = d.data(); });
+
+        if (employees.length === 0) {
+            masterSalaryTableBody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 28px; color: var(--text-secondary);">
+                        No employees found. Add employees in the main dashboard or Employee tab.
+                    </td>
+                </tr>
+            `;
+            statTotalBaseSalary.textContent = "₹0";
+            statTotalAttendanceCuts.textContent = "-₹0";
+            statTotalLoanAdvDeductions.textContent = "-₹0";
+            statTotalNetPayout.textContent = "₹0";
+            return;
+        }
+
+        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        let totalBase = 0;
+        let totalAttendanceCut = 0;
+        let totalLoanAdvCut = 0;
+        let totalNet = 0;
+
+        masterSalaryTableBody.innerHTML = "";
+
+        sortedEmployees.forEach((emp) => {
+            const card = attendanceMap[`${emp.id}_${monthKey}`];
+            const calc = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
+
+            totalBase += calc.baseSalary;
+            totalAttendanceCut += (calc.absentSalaryCut + calc.hoursSalaryCut);
+            totalLoanAdvCut += (calc.advanceDeduction + calc.loanDeduction);
+            totalNet += calc.netSalary;
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>
+                    <strong>${escapeHtml(emp.name || emp.id)}</strong>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHtml(emp.id)} &bull; ${escapeHtml(emp.jobTitle || "Staff")}</div>
+                </td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <strong>₹${calc.baseSalary.toLocaleString("en-IN")}</strong>
+                            <button class="btn-edit-salary-action" title="Edit Base Salary & Multipliers">✏️</button>
+                        </div>
+                        <span class="badge-multiplier">${calc.hoursDivisor}h div &bull; ${calc.penaltyMultiplier}× pen</span>
+                    </div>
+                </td>
+                <td>
+                    <span style="color: ${calc.totalAbsentDays > 0 ? '#dc2626' : 'inherit'}; font-weight: ${calc.totalAbsentDays > 0 ? '700' : 'normal'};">
+                        ${calc.totalAbsentDays} d
+                    </span>
+                    ${calc.sundayPenalties > 0 ? `<span class="badge-penalty" title="${calc.sundayPenalties} Sunday salary cuts for &ge;2 weekday absences">+${calc.sundayPenalties} Sun</span>` : ""}
+                    <div style="font-size: 0.72rem; color: #dc2626;">-₹${calc.absentSalaryCut.toLocaleString("en-IN")}</div>
+                </td>
+                <td>
+                    <span>${calc.totalMissedHours} h</span>
+                    <div style="font-size: 0.72rem; color: #d97706;">-₹${calc.hoursSalaryCut.toLocaleString("en-IN")}</div>
+                </td>
+                <td>
+                    <strong style="color: #4338ca;">₹${calc.grossEarned.toLocaleString("en-IN")}</strong>
+                </td>
+                <td>
+                    <span style="color: ${calc.advanceDeduction > 0 ? '#d97706' : 'inherit'}; font-weight: ${calc.advanceDeduction > 0 ? '700' : 'normal'};">
+                        ₹${calc.advanceDeduction.toLocaleString("en-IN")}
+                    </span>
+                </td>
+                <td>
+                    <span style="color: ${calc.loanDeduction > 0 ? '#d97706' : 'inherit'}; font-weight: ${calc.loanDeduction > 0 ? '700' : 'normal'};">
+                        ₹${calc.loanDeduction.toLocaleString("en-IN")}
+                    </span>
+                    ${calc.remainingLoan > 0 ? `<div style="font-size: 0.7rem; color: #94a3b8;">Bal: ₹${calc.remainingLoan.toLocaleString("en-IN")}</div>` : ""}
+                </td>
+                <td>
+                    <span class="badge-net-pay">₹${calc.netSalary.toLocaleString("en-IN")}</span>
+                </td>
+                <td style="text-align: right;">
+                    <div class="btn-action-group">
+                        <button class="btn-slip-view" title="View 2-Up Payslip / Download PDF">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                            Slip
+                        </button>
+                        <button class="btn-loan-manage" title="Manage Loans & Advances">
+                            💳 Loan
+                        </button>
+                    </div>
+                </td>
+            `;
+
+            tr.querySelector(".btn-edit-salary-action").addEventListener("click", () => openEditSalaryModal(emp));
+            tr.querySelector(".btn-slip-view").addEventListener("click", () => openSalarySlipModal(emp, selectedYear, selectedMonth, calc));
+            tr.querySelector(".btn-loan-manage").addEventListener("click", () => openLoanAdvanceModal(emp));
+
+            masterSalaryTableBody.appendChild(tr);
+        });
+
+        statTotalBaseSalary.textContent = `₹${totalBase.toLocaleString("en-IN")}`;
+        statTotalAttendanceCuts.textContent = `-₹${totalAttendanceCut.toLocaleString("en-IN")}`;
+        statTotalLoanAdvDeductions.textContent = `-₹${totalLoanAdvCut.toLocaleString("en-IN")}`;
+        statTotalNetPayout.textContent = `₹${totalNet.toLocaleString("en-IN")}`;
+
+    } catch (error) {
+        console.error("Error loading master salary data:", error);
+        masterSalaryTableBody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: 24px; color: #dc2626;">
+                    ❌ Error loading salary data. Check Firestore connection.
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function renderMasterEmployeesList(filterQuery = "") {
+    const tbody = document.getElementById("masterEmployeesTableBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    const queryLower = (filterQuery || "").trim().toLowerCase();
+    const filtered = employees.filter((emp) => {
+        if (!queryLower) return true;
+        return (
+            (emp.id && emp.id.toLowerCase().includes(queryLower)) ||
+            (emp.name && emp.name.toLowerCase().includes(queryLower)) ||
+            (emp.jobTitle && emp.jobTitle.toLowerCase().includes(queryLower))
+        );
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 24px;">
+                    ${employees.length === 0 ? "No employees registered." : "No employees match your search."}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    filtered.forEach((emp) => {
+        const financialRecords = Array.isArray(emp.financialRecords) ? emp.financialRecords : [];
+        const totalLoan = financialRecords.filter(r => r.type === "loan").reduce((s, r) => s + Number(r.amount || 0), 0);
+        const totalRepaid = financialRecords.filter(r => r.type === "loan_repayment").reduce((s, r) => s + Number(r.amount || 0), 0);
+        const remainingLoan = Math.max(0, totalLoan - totalRepaid);
+
+        const hoursDivisor = emp.hoursDivider !== undefined && emp.hoursDivider !== "" ? emp.hoursDivider : 208;
+        const penaltyMultiplier = emp.penaltyMultiplier !== undefined && emp.penaltyMultiplier !== "" ? emp.penaltyMultiplier : 1.25;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><span class="master-emp-id-badge">${escapeHtml(emp.id)}</span></td>
+            <td style="font-weight: 600;">${escapeHtml(emp.name || emp.id)}</td>
+            <td style="color: var(--text-secondary);">${escapeHtml(emp.jobTitle || "Employee")}</td>
+            <td>
+                <div>
+                    <strong>₹${Number(emp.salary || 0).toLocaleString("en-IN")}</strong>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary);">${hoursDivisor}h div &bull; ${penaltyMultiplier}× pen</div>
+                </div>
+            </td>
+            <td>
+                <span style="color: ${remainingLoan > 0 ? '#dc2626' : 'inherit'}; font-weight: ${remainingLoan > 0 ? '700' : 'normal'};">
+                    ₹${remainingLoan.toLocaleString("en-IN")}
+                </span>
+            </td>
+            <td style="text-align: right;">
+                <div class="btn-action-group">
+                    <button class="btn-edit-salary-action" title="Set Base Salary & Rules">✏️ Rules</button>
+                    <button class="btn-loan-manage" title="Manage Loans & Advances">💳 Loan/Adv</button>
+                    <button class="btn-delete-emp-master" data-emp-id="${escapeHtml(emp.id)}" title="Delete Employee">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
+                        Delete
+                    </button>
+                </div>
+            </td>
+        `;
+
+        tr.querySelector(".btn-edit-salary-action").addEventListener("click", () => openEditSalaryModal(emp));
+        tr.querySelector(".btn-loan-manage").addEventListener("click", () => openLoanAdvanceModal(emp));
+        tr.querySelector(".btn-delete-emp-master").addEventListener("click", () => deleteEmployee(emp));
+
+        tbody.appendChild(tr);
+    });
+}
+
+// ========================================================
+// EDIT BASE SALARY & DEDUCTION RULES MODAL
+// ========================================================
+function openEditSalaryModal(emp) {
+    editSalaryEmpName.textContent = emp.name || emp.id;
+    editSalaryEmpId.textContent = emp.id;
+    editSalaryEmpIdHidden.value = emp.id;
+    baseSalaryInput.value = emp.salary || "";
+    hoursDivisorInput.value = emp.hoursDivider !== undefined && emp.hoursDivider !== "" ? emp.hoursDivider : 208;
+    penaltyMultiplierInput.value = emp.penaltyMultiplier !== undefined && emp.penaltyMultiplier !== "" ? emp.penaltyMultiplier : 1.25;
+    editSalaryModal.classList.remove("hidden");
+    setTimeout(() => baseSalaryInput.focus(), 150);
+}
+
+function closeEditSalaryModal() {
+    editSalaryModal.classList.add("hidden");
+    baseSalaryInput.value = "";
+}
+
+async function handleSaveBaseSalary(e) {
+    e.preventDefault();
+    const empId = editSalaryEmpIdHidden.value;
+    const salaryVal = Number(baseSalaryInput.value.trim());
+    const divisorVal = Number(hoursDivisorInput.value.trim()) || 208;
+    const penaltyVal = Number(penaltyMultiplierInput.value.trim());
+
+    if (!empId || isNaN(salaryVal) || salaryVal < 0) {
+        showToast("⚠️ Please enter a valid base salary amount.");
+        return;
+    }
+    if (isNaN(divisorVal) || divisorVal <= 0) {
+        showToast("⚠️ Hours divisor must be greater than 0.");
+        return;
+    }
+    if (isNaN(penaltyVal) || penaltyVal < 0) {
+        showToast("⚠️ Penalty multiplier must be 0 or greater.");
+        return;
+    }
+
+    try {
+        await setDoc(employeeDocRef(empId), {
+            salary: salaryVal,
+            hoursDivider: divisorVal,
+            penaltyMultiplier: penaltyVal,
+        }, { merge: true });
+
+        // Update in-memory employee record
+        const targetEmp = employees.find((x) => x.id === empId);
+        if (targetEmp) {
+            targetEmp.salary = salaryVal;
+            targetEmp.hoursDivider = divisorVal;
+            targetEmp.penaltyMultiplier = penaltyVal;
+        }
+
+        closeEditSalaryModal();
+        showToast(`✅ Salary (₹${salaryVal.toLocaleString("en-IN")}), Divisor (${divisorVal}h), & Penalty (${penaltyVal}×) saved.`);
+        loadMasterSalaryData();
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+    } catch (err) {
+        console.error("Error saving base salary & rules:", err);
+        showToast("❌ Error saving salary rules to Firestore.");
+    }
+}
+
+// ========================================================
+// LOAN & ADVANCE MANAGEMENT MODAL
+// ========================================================
+function openLoanAdvanceModal(emp) {
+    const selectedYear = masterSalaryYear?.value || getTodayString().slice(0, 4);
+    const selectedMonth = masterSalaryMonth?.value || getTodayString().slice(5, 7);
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+
+    loanAdvanceModal.dataset.empId = emp.id;
+    loanAdvanceModal.dataset.monthKey = monthKey;
+
+    loanEmpName.textContent = emp.name || emp.id;
+    loanEmpId.textContent = emp.id;
+    financialEmpIdHidden.value = emp.id;
+    financialDate.value = getTodayString();
+    financialAmount.value = "";
+    financialNote.value = "";
+
+    loanDeductionMonthLabel.textContent = `${selectedMonth}/${selectedYear}`;
+    const configuredDeduction = emp.monthlyLoanDeductions?.[monthKey] !== undefined
+        ? emp.monthlyLoanDeductions[monthKey]
+        : 0;
+    monthLoanDeductionInput.value = configuredDeduction || "";
+
+    renderLoanAdvanceOverviewAndLedger(emp, monthKey);
+    loanAdvanceModal.classList.remove("hidden");
+}
+
+function closeLoanAdvanceModal() {
+    loanAdvanceModal.classList.add("hidden");
+    financialAmount.value = "";
+    financialNote.value = "";
+}
+
+function renderLoanAdvanceOverviewAndLedger(emp, monthKey) {
+    const financialRecords = Array.isArray(emp.financialRecords) ? emp.financialRecords : [];
+
+    const totalLoanTaken = financialRecords
+        .filter((r) => r.type === "loan")
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    const totalLoanRepaid = financialRecords
+        .filter((r) => r.type === "loan_repayment")
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    const remainingLoan = Math.max(0, totalLoanTaken - totalLoanRepaid);
+
+    const activeAdvance = financialRecords
+        .filter((r) => r.type === "advance" && !r.repaid && (!r.month || r.month === monthKey))
+        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    loanStatTotalLoans.textContent = `₹${totalLoanTaken.toLocaleString("en-IN")}`;
+    loanStatTotalRepaid.textContent = `₹${totalLoanRepaid.toLocaleString("en-IN")}`;
+    loanStatRemainingLoan.textContent = `₹${remainingLoan.toLocaleString("en-IN")}`;
+    loanStatActiveAdvance.textContent = `₹${activeAdvance.toLocaleString("en-IN")}`;
+
+    // Ledger table
+    financialHistoryTableBody.innerHTML = "";
+    if (financialRecords.length === 0) {
+        financialHistoryTableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 18px;">
+                    No loan or advance records for this employee yet.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const sortedRecords = [...financialRecords].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    sortedRecords.forEach((rec) => {
+        const tr = document.createElement("tr");
+        const typeLabels = {
+            loan: `<span style="color: #dc2626; font-weight: 700;">💳 Loan Given</span>`,
+            advance: `<span style="color: #d97706; font-weight: 700;">💵 Advance Given</span>`,
+            loan_repayment: `<span style="color: #16a34a; font-weight: 700;">🔄 Loan Repayment</span>`,
+        };
+
+        tr.innerHTML = `
+            <td>${escapeHtml(rec.date || "—")}</td>
+            <td>${typeLabels[rec.type] || rec.type}</td>
+            <td><strong>₹${Number(rec.amount || 0).toLocaleString("en-IN")}</strong></td>
+            <td style="color: var(--text-secondary);">${escapeHtml(rec.note || (rec.month ? `Month: ${rec.month}` : "—"))}</td>
+            <td style="text-align: right;">
+                <button class="btn-delete-emp-master" style="padding: 3px 8px; font-size: 0.72rem;" title="Delete Record">
+                    ✕
+                </button>
+            </td>
+        `;
+
+        tr.querySelector("button").addEventListener("click", () => {
+            handleDeleteFinancialRecord(emp.id, rec.id);
+        });
+
+        financialHistoryTableBody.appendChild(tr);
+    });
+}
+
+async function handleAddFinancialRecord(e) {
+    e.preventDefault();
+    const empId = financialEmpIdHidden.value;
+    const type = financialType.value;
+    const amount = Number(financialAmount.value.trim());
+    const date = financialDate.value || getTodayString();
+    const note = financialNote.value.trim();
+    const monthKey = loanAdvanceModal.dataset.monthKey || getTodayString().slice(0, 7);
+
+    if (!empId || isNaN(amount) || amount <= 0) {
+        showToast("⚠️ Please enter a valid amount.");
+        return;
+    }
+
+    const targetEmp = employees.find((x) => x.id === empId);
+    if (!targetEmp) return;
+
+    const currentRecords = Array.isArray(targetEmp.financialRecords) ? [...targetEmp.financialRecords] : [];
+    const newRecord = {
+        id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        type,
+        amount,
+        date,
+        note,
+        month: monthKey,
+        repaid: false,
+    };
+
+    currentRecords.push(newRecord);
+
+    try {
+        await setDoc(employeeDocRef(empId), {
+            financialRecords: currentRecords,
+        }, { merge: true });
+
+        targetEmp.financialRecords = currentRecords;
+        financialAmount.value = "";
+        financialNote.value = "";
+
+        showToast(`✅ ${type === "loan" ? "Loan" : "Advance"} of ₹${amount.toLocaleString("en-IN")} recorded.`);
+        renderLoanAdvanceOverviewAndLedger(targetEmp, monthKey);
+        loadMasterSalaryData();
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+    } catch (err) {
+        console.error("Error adding financial record:", err);
+        showToast("❌ Error saving record to Firestore.");
+    }
+}
+
+async function handleSaveMonthlyLoanDeduction() {
+    const empId = loanAdvanceModal.dataset.empId;
+    const monthKey = loanAdvanceModal.dataset.monthKey;
+    const deductionVal = Number(monthLoanDeductionInput.value.trim()) || 0;
+
+    if (!empId || !monthKey || isNaN(deductionVal) || deductionVal < 0) {
+        showToast("⚠️ Please enter a valid deduction amount.");
+        return;
+    }
+
+    const targetEmp = employees.find((x) => x.id === empId);
+    if (!targetEmp) return;
+
+    const currentMonthlyDeductions = targetEmp.monthlyLoanDeductions || {};
+    currentMonthlyDeductions[monthKey] = deductionVal;
+
+    try {
+        await setDoc(employeeDocRef(empId), {
+            monthlyLoanDeductions: currentMonthlyDeductions,
+        }, { merge: true });
+
+        targetEmp.monthlyLoanDeductions = currentMonthlyDeductions;
+        showToast(`✅ Set ₹${deductionVal.toLocaleString("en-IN")} loan cut for ${monthKey}.`);
+        loadMasterSalaryData();
+    } catch (err) {
+        console.error("Error saving monthly deduction:", err);
+        showToast("❌ Error saving deduction to Firestore.");
+    }
+}
+
+async function handleDeleteFinancialRecord(empId, recId) {
+    if (!confirm("Are you sure you want to delete this financial entry?")) return;
+
+    const targetEmp = employees.find((x) => x.id === empId);
+    if (!targetEmp) return;
+
+    const updatedRecords = (targetEmp.financialRecords || []).filter((r) => r.id !== recId);
+
+    try {
+        await setDoc(employeeDocRef(empId), {
+            financialRecords: updatedRecords,
+        }, { merge: true });
+
+        targetEmp.financialRecords = updatedRecords;
+        const monthKey = loanAdvanceModal.dataset.monthKey || getTodayString().slice(0, 7);
+        renderLoanAdvanceOverviewAndLedger(targetEmp, monthKey);
+        loadMasterSalaryData();
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+        showToast("✓ Entry removed.");
+    } catch (err) {
+        console.error("Error deleting entry:", err);
+        showToast("❌ Error deleting entry from Firestore.");
+    }
+}
+
+// ========================================================
+// 2-UP A4 PAYSLIP BUILDER & MULTI-EMPLOYEE PDF GENERATOR
+// ========================================================
+
+/**
+ * Returns HTML for one half of a payslip (either Employer Copy or Employee Copy)
+ */
+function renderSingleSlipHalfHTML(emp, year, month, calc, copyLabel) {
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthName = monthNames[Number(month) - 1];
+    const companyName = document.getElementById("companyNameDisplay")?.textContent || "Company";
+    const companyLogo = document.getElementById("companyLogoDisplay")?.src || "Email_logo-removebg-preview.png";
+
+    return `
+        <div class="slip-half">
+            <div class="slip-header">
+                <div class="slip-company-info">
+                    <img src="${companyLogo}" alt="Logo" class="slip-company-logo">
+                    <div>
+                        <div class="slip-company-name">${escapeHtml(companyName)}</div>
+                        <div style="font-size: 0.7rem; color: #64748b;">Employee Payroll Statement</div>
+                    </div>
+                </div>
+                <div class="slip-title-badge">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <h3 class="slip-title-text">SALARY PAYSLIP</h3>
+                        <span class="slip-copy-tag">${escapeHtml(copyLabel)}</span>
+                    </div>
+                    <p class="slip-period-text">${monthName} ${year}</p>
+                </div>
+            </div>
+
+            <div class="slip-emp-box">
+                <div class="slip-emp-field">
+                    <span class="slip-emp-label">Employee Name</span>
+                    <span class="slip-emp-val">${escapeHtml(emp.name || emp.id)}</span>
+                </div>
+                <div class="slip-emp-field">
+                    <span class="slip-emp-label">Employee ID</span>
+                    <span class="slip-emp-val" style="font-family: monospace;">${escapeHtml(emp.id)}</span>
+                </div>
+                <div class="slip-emp-field">
+                    <span class="slip-emp-label">Designation</span>
+                    <span class="slip-emp-val">${escapeHtml(emp.jobTitle || "Staff")}</span>
+                </div>
+                <div class="slip-emp-field">
+                    <span class="slip-emp-label">Pay Period</span>
+                    <span class="slip-emp-val">${calc.daysInMonth} Days (${calc.presentDays} Present)</span>
+                </div>
+            </div>
+
+            <table class="slip-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50%;">Description / Item</th>
+                        <th style="text-align: center; width: 25%;">Units / Rate Basis</th>
+                        <th style="text-align: right; width: 25%;">Amount (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Monthly Base Salary</strong></td>
+                        <td style="text-align: center; color: #64748b;">₹${Math.round(calc.dailyWage)}/day &bull; ₹${Math.round(calc.hourlyBaseRate)}/hr</td>
+                        <td style="text-align: right; font-weight: 700;">₹${calc.baseSalary.toLocaleString("en-IN")}</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Absent Days Cut
+                            ${calc.sundayPenalties > 0 ? `<br><small style="color:#dc2626;">(Includes ${calc.sundayPenalties} Sunday cut for &ge;2 weekday absences)</small>` : ""}
+                        </td>
+                        <td style="text-align: center; color: #dc2626;">${calc.totalAbsentDays} Days (${calc.actualAbsentDays} Wkday + ${calc.sundayPenalties} Sun)</td>
+                        <td style="text-align: right; color: #dc2626; font-weight: 600;">-₹${calc.absentSalaryCut.toLocaleString("en-IN")}</td>
+                    </tr>
+                    <tr>
+                        <td>Hours Cut (${calc.hoursDivisor}h div &bull; ${calc.penaltyMultiplier}× pen)</td>
+                        <td style="text-align: center; color: #d97706;">${calc.totalMissedHours} Hours late</td>
+                        <td style="text-align: right; color: #d97706; font-weight: 600;">-₹${calc.hoursSalaryCut.toLocaleString("en-IN")}</td>
+                    </tr>
+                    <tr class="row-subtotal">
+                        <td><strong>Gross Payable (After Attendance Cuts)</strong></td>
+                        <td style="text-align: center;">—</td>
+                        <td style="text-align: right; font-weight: 800;">₹${calc.grossEarned.toLocaleString("en-IN")}</td>
+                    </tr>
+                    <tr>
+                        <td>Advance Deduction</td>
+                        <td style="text-align: center; color: #d97706;">Current Month Advance</td>
+                        <td style="text-align: right; color: #d97706; font-weight: 600;">${calc.advanceDeduction > 0 ? `-₹${calc.advanceDeduction.toLocaleString("en-IN")}` : "₹0"}</td>
+                    </tr>
+                    <tr>
+                        <td>Loan Installment Deduction</td>
+                        <td style="text-align: center; color: #d97706;">Monthly Loan Recovery</td>
+                        <td style="text-align: right; color: #d97706; font-weight: 600;">${calc.loanDeduction > 0 ? `-₹${calc.loanDeduction.toLocaleString("en-IN")}` : "₹0"}</td>
+                    </tr>
+                    <tr class="row-net">
+                        <td><strong>NET PAYABLE SALARY</strong></td>
+                        <td style="text-align: center; font-size: 0.75rem; color: #4338ca; text-transform: uppercase;">Bank Transfer / Cash</td>
+                        <td style="text-align: right; font-size: 1.05rem; color: #16a34a;">₹${calc.netSalary.toLocaleString("en-IN")}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="slip-loan-summary-box">
+                <span><strong>Remaining Loan Balance:</strong> ₹${calc.remainingLoan.toLocaleString("en-IN")}</span>
+                <span style="font-size: 0.7rem; color: #9a3412;">(Total Loan: ₹${calc.totalLoanTaken.toLocaleString("en-IN")} &bull; Total Repaid: ₹${(calc.totalLoanRepaid + calc.loanDeduction).toLocaleString("en-IN")})</span>
+            </div>
+
+            <div class="slip-formula-note">
+                * Daily Wage = Salary / ${calc.daysInMonth}d = ₹${calc.dailyWage.toFixed(2)}/d. Hours Cut = (Salary / ${calc.hoursDivisor}h) × ${calc.totalMissedHours}h × ${calc.penaltyMultiplier} pen = ₹${calc.hoursSalaryCut}. Sunday cut applied if absent &ge;2 days in a week.
+            </div>
+
+            <div class="slip-signatures">
+                <div class="slip-signature-box">
+                    <div class="slip-signature-line"></div>
+                    <span class="slip-signature-text">Authorized Signatory</span>
+                </div>
+                <div class="slip-signature-box">
+                    <div class="slip-signature-line"></div>
+                    <span class="slip-signature-text">Employee Signature</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Returns HTML for full A4 sheet containing Top Half + Cut Line + Bottom Half
+ */
+function renderEmployeeA4SheetHTML(emp, year, month, calc) {
+    return `
+        <div class="a4-page-sheet" data-emp-id="${escapeHtml(emp.id)}">
+            ${renderSingleSlipHalfHTML(emp, year, month, calc, "Employer Copy")}
+            <div class="slip-cut-divider">
+                <span>✂ CUT ALONG DOTTED LINE — (TOP: EMPLOYER COPY / BOTTOM: EMPLOYEE COPY) ✂</span>
+            </div>
+            ${renderSingleSlipHalfHTML(emp, year, month, calc, "Employee Copy")}
+        </div>
+    `;
+}
+
+function openSalarySlipModal(emp, year, month, calc) {
+    const monthKey = `${year}-${month}`;
+    salarySlipModal.dataset.mode = "single";
+    salarySlipModal.dataset.empName = emp.name || emp.id;
+    salarySlipModal.dataset.monthKey = monthKey;
+
+    slipModalTitle.textContent = `Payslip (2-Up A4): ${emp.name || emp.id} (${month}/${year})`;
+    salarySlipPrintArea.innerHTML = renderEmployeeA4SheetHTML(emp, year, month, calc);
+    salarySlipModal.classList.remove("hidden");
+}
+
+function closeSalarySlipModal() {
+    salarySlipModal.classList.add("hidden");
+}
+
+function downloadSingleSalarySlipPDF(empName, monthKey) {
+    const element = document.getElementById("salarySlipPrintArea");
+    if (!element) return;
+
+    showToast("📄 Generating 2-Up A4 Payslip PDF...");
+    const opt = {
+        margin: [6, 6, 6, 6],
+        filename: `SalarySlip_${empName.replace(/\s+/g, "_")}_${monthKey}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ['css', 'legacy'] }
+    };
+
+    if (typeof html2pdf !== "undefined") {
+        html2pdf().set(opt).from(element).save().then(() => {
+            showToast("✅ PDF downloaded successfully");
+        }).catch((err) => {
+            console.error("PDF generation error:", err);
+            window.print();
+        });
+    } else {
+        window.print();
+    }
+}
+
+async function handleDownloadAllPayslips() {
+    const selectedYear = masterSalaryYear?.value;
+    const selectedMonth = masterSalaryMonth?.value;
+    if (!selectedYear || !selectedMonth) return;
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+
+    showToast("⏳ Gathering attendance & generating Combined PDF...");
+
+    try {
+        const attendanceQuery = query(
+            attendanceCardsCollectionRef(),
+            where("month", "==", monthKey)
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceMap = {};
+        attendanceSnap.forEach((d) => { attendanceMap[d.id] = d.data(); });
+
+        if (employees.length === 0) {
+            showToast("⚠️ No employees found to generate payslips.");
+            return;
+        }
+
+        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        let combinedHTML = "";
+        sortedEmployees.forEach((emp) => {
+            const card = attendanceMap[`${emp.id}_${monthKey}`];
+            const calc = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
+            combinedHTML += renderEmployeeA4SheetHTML(emp, selectedYear, selectedMonth, calc);
+        });
+
+        salarySlipPrintArea.innerHTML = combinedHTML;
+        salarySlipModal.dataset.mode = "all";
+        salarySlipModal.dataset.monthKey = monthKey;
+        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${sortedEmployees.length} Sheets`;
+        salarySlipModal.classList.remove("hidden");
+
+        // Download multi-page PDF
+        downloadAllSalarySlipsPDF(selectedYear, selectedMonth);
+
+    } catch (err) {
+        console.error("Error generating all payslips PDF:", err);
+        showToast("❌ Error generating combined payslips PDF.");
+    }
+}
+
+function downloadAllSalarySlipsPDF(year, month) {
+    const element = document.getElementById("salarySlipPrintArea");
+    if (!element) return;
+
+    showToast("📄 Compiling Combined PDF for all employees...");
+    const opt = {
+        margin: [6, 6, 6, 6],
+        filename: `All_Employees_Salary_Slips_${year}-${month}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ['css', 'legacy'] }
+    };
+
+    if (typeof html2pdf !== "undefined") {
+        html2pdf().set(opt).from(element).save().then(() => {
+            showToast("✅ Combined PDF downloaded successfully!");
+        }).catch((err) => {
+            console.error("Combined PDF error:", err);
+            window.print();
+        });
+    } else {
+        window.print();
+    }
+}
+
+async function handlePrintAllPayslips() {
+    const selectedYear = masterSalaryYear?.value;
+    const selectedMonth = masterSalaryMonth?.value;
+    if (!selectedYear || !selectedMonth) return;
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+
+    try {
+        const attendanceQuery = query(
+            attendanceCardsCollectionRef(),
+            where("month", "==", monthKey)
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceMap = {};
+        attendanceSnap.forEach((d) => { attendanceMap[d.id] = d.data(); });
+
+        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        let combinedHTML = "";
+        sortedEmployees.forEach((emp) => {
+            const card = attendanceMap[`${emp.id}_${monthKey}`];
+            const calc = calculateEmployeeSalary(emp, selectedYear, selectedMonth, card);
+            combinedHTML += renderEmployeeA4SheetHTML(emp, selectedYear, selectedMonth, calc);
+        });
+
+        salarySlipPrintArea.innerHTML = combinedHTML;
+        salarySlipModal.dataset.mode = "all";
+        salarySlipModal.dataset.monthKey = monthKey;
+        slipModalTitle.textContent = `All Employees Payslips (${monthKey}) - ${sortedEmployees.length} Sheets`;
+        salarySlipModal.classList.remove("hidden");
+
+        setTimeout(() => {
+            window.print();
+        }, 300);
+
+    } catch (err) {
+        console.error("Error opening all payslips for print:", err);
+        showToast("❌ Error preparing payslips for print.");
+    }
 }
 
 // ========================================================
@@ -1764,7 +2967,7 @@ function openViewAttendanceModal() {
         viewYear.appendChild(opt);
     }
 
-    const monthNames = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+    const monthNames = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
     monthNames.forEach((m, idx) => {
         const opt = document.createElement("option");
         opt.value = m;
@@ -1773,9 +2976,8 @@ function openViewAttendanceModal() {
         viewMonth.appendChild(opt);
     });
 
-    // Clear table
-    document.getElementById("viewAttendanceTableWrap").innerHTML =
-        '<p class="view-placeholder">Select a month and click Load to view attendance.</p>';
+    // Auto-load attendance directly for selected (current) month
+    loadViewAttendance();
 }
 
 function closeViewAttendanceModal() {
@@ -1783,7 +2985,7 @@ function closeViewAttendanceModal() {
 }
 
 async function loadViewAttendance() {
-    const selectedYear  = document.getElementById("viewYear").value;
+    const selectedYear = document.getElementById("viewYear").value;
     const selectedMonth = document.getElementById("viewMonth").value;
 
     if (!selectedYear || !selectedMonth) {
@@ -1813,10 +3015,10 @@ async function loadViewAttendance() {
         attendanceSnap.forEach(d => { attendanceMap[d.id] = d.data(); });
 
         // ── Build table ──────────────────────────────────────────
-        const year       = Number(selectedYear);
-        const monthNum   = Number(selectedMonth);
+        const year = Number(selectedYear);
+        const monthNum = Number(selectedMonth);
         const daysInMonth = getDaysInMonth(year, monthNum);
-        const todayStr   = getTodayString();
+        const todayStr = getTodayString();
 
         // Totals per employee
         const totals = empList.map(() => ({ present: 0, absent: 0, missedMinutes: 0 }));
@@ -1834,11 +3036,11 @@ async function loadViewAttendance() {
         let bodyRows = "";
 
         for (let d = 1; d <= daysInMonth; d++) {
-            const paddedDay  = String(d).padStart(2, "0");
+            const paddedDay = String(d).padStart(2, "0");
             const fullDateStr = `${selectedYear}-${selectedMonth}-${paddedDay}`;
             if (fullDateStr > todayStr) continue; // skip future
 
-            const dayKey  = String(d);
+            const dayKey = String(d);
             const dateObj = new Date(year, monthNum - 1, d);
             const isSunday = dateObj.getDay() === 0;
 
@@ -1847,14 +3049,14 @@ async function loadViewAttendance() {
 
             let cells = "";
             empList.forEach((emp, idx) => {
-                const card    = attendanceMap[`${emp.id}_${monthKey}`];
-                const rec     = card?.attendance?.[dayKey] || null;
+                const card = attendanceMap[`${emp.id}_${monthKey}`];
+                const rec = card?.attendance?.[dayKey] || null;
                 const isEdited = !!(rec?.editNote);
 
                 let inVal = "—", outVal = "—", missedVal = "—";
                 let cellClass = "";
-                let editAttr  = "";
-                let editIcon  = "";
+                let editAttr = "";
+                let editIcon = "";
 
                 if (isSunday && !rec) {
                     inVal = "Sunday"; outVal = "Sunday"; missedVal = "—";
@@ -1865,7 +3067,7 @@ async function loadViewAttendance() {
                         cellClass = isEdited ? "cell-absent cell-edited" : "cell-absent";
                         if (!isSunday) totals[idx].absent++;
                     } else if (rec.Status === "P") {
-                        inVal  = rec.in  || "—";
+                        inVal = rec.in || "—";
                         // auto = no out in DB; manual = out exists in DB
                         let isAuto = !rec.out;
                         let actualOut = rec.out || "17:30";
@@ -1925,17 +3127,17 @@ async function loadViewAttendance() {
         }
 
         // ── Summary rows ─────────────────────────────────────────
-        let summaryPresent  = `<tr class="summary-row"><td class="summary-label">✅ Total Present</td>`;
-        let summaryAbsent   = `<tr class="summary-row"><td class="summary-label">❌ Total Absent</td>`;
-        let summaryMissed   = `<tr class="summary-row"><td class="summary-label">⏱ Hrs Missed</td>`;
+        let summaryPresent = `<tr class="summary-row"><td class="summary-label">✅ Total Present</td>`;
+        let summaryAbsent = `<tr class="summary-row"><td class="summary-label">❌ Total Absent</td>`;
+        let summaryMissed = `<tr class="summary-row"><td class="summary-label">⏱ Hrs Missed</td>`;
         totals.forEach(t => {
             summaryPresent += `<td colspan="2" class="summary-val">${t.present}</td><td colspan="2"></td>`;
-            summaryAbsent  += `<td colspan="2" class="summary-val">${t.absent}</td><td colspan="2"></td>`;
-            summaryMissed  += `<td colspan="3" class="summary-val missed-val">${formatMinutes(t.missedMinutes)}</td><td></td>`;
+            summaryAbsent += `<td colspan="2" class="summary-val">${t.absent}</td><td colspan="2"></td>`;
+            summaryMissed += `<td colspan="3" class="summary-val missed-val">${formatMinutes(t.missedMinutes)}</td><td></td>`;
         });
         summaryPresent += `</tr>`;
-        summaryAbsent  += `</tr>`;
-        summaryMissed  += `</tr>`;
+        summaryAbsent += `</tr>`;
+        summaryMissed += `</tr>`;
 
         const tableHtml = `
             <div class="view-table-month-label">
@@ -1968,7 +3170,7 @@ async function loadViewAttendance() {
         wrap.querySelectorAll(".cell-edited").forEach(cell => {
             cell.style.cursor = "pointer";
             cell.addEventListener("click", (e) => {
-                const row   = cell.closest("tr");
+                const row = cell.closest("tr");
                 const badge = row?.querySelector(".edited-badge");
                 if (badge) badge.click();
             });
