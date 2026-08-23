@@ -1017,7 +1017,7 @@ async function downloadAttendanceForMonth() {
                     } else {
                         inValue = dayRecord.in || "";
                         outValue = dayRecord.defaultOut
-                            ? "17:30 (default)"
+                            ? `${dayRecord.out || "17:30"} (default)`
                             : (dayRecord.out || "");
                         if (dayRecord.Status === "P") {
                             totals[idx].present += 1;
@@ -1860,7 +1860,7 @@ async function loadViewAttendance() {
                     } else if (rec.Status === "P") {
                         inVal  = rec.in  || "—";
                         outVal = rec.defaultOut
-                            ? `<span title="Default OUT — not manually confirmed" class="default-out">17:30*</span>`
+                            ? `<span title="Default OUT — not manually confirmed" class="default-out">${rec.out || "17:30"}*</span>`
                             : (rec.out || "—");
                         cellClass = isEdited ? "cell-present cell-edited" : "cell-present";
                         totals[idx].present++;
