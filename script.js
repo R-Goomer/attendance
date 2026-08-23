@@ -1734,11 +1734,12 @@ function setupEventListeners() {
     cancelAddEmployee.addEventListener("click", closeAddEmployeeModal);
     addEmployeeForm.addEventListener("submit", handleAddEmployee);
 
-    // View Attendance button
+    // View Attendance modal listeners
     document.getElementById("viewAttendanceBtn").addEventListener("click", openViewAttendanceModal);
     document.getElementById("viewAttendanceClose").addEventListener("click", closeViewAttendanceModal);
     document.getElementById("viewAttendanceOverlay").addEventListener("click", closeViewAttendanceModal);
-    document.getElementById("viewLoadBtn").addEventListener("click", loadViewAttendance);
+    document.getElementById("viewYear").addEventListener("change", loadViewAttendance);
+    document.getElementById("viewMonth").addEventListener("change", loadViewAttendance);
 
     // Master Mode Listeners
     masterBtn.addEventListener("click", handleMasterButtonClick);
@@ -1987,9 +1988,8 @@ function openViewAttendanceModal() {
         viewMonth.appendChild(opt);
     });
 
-    // Clear table
-    document.getElementById("viewAttendanceTableWrap").innerHTML =
-        '<p class="view-placeholder">Select a month and click Load to view attendance.</p>';
+    // Auto-load attendance directly for selected (current) month
+    loadViewAttendance();
 }
 
 function closeViewAttendanceModal() {
