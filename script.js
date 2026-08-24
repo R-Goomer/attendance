@@ -2128,7 +2128,6 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     const configuredLoanDeduction = emp.monthlyLoanDeductions?.[monthKey] !== undefined
         ? Number(emp.monthlyLoanDeductions[monthKey])
         : 0;
-    const loanDeduction = Math.min(remainingLoanBeforeMonth, configuredLoanDeduction);
 
     // Advance for this month (deducted in current salary)
     const activeAdvanceForMonth = financialRecords
