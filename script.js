@@ -2128,15 +2128,26 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     const configuredLoanDeduction = emp.monthlyLoanDeductions?.[monthKey] !== undefined
         ? Number(emp.monthlyLoanDeductions[monthKey])
         : 0;
-    const loanDeduction = Math.min(remainingLoanBeforeMonth, configuredLoanDeduction);
 
-    // Advance for this month (deducted definitely in current salary)
+    // Advance for this month (deducted in current salary)
     const activeAdvanceForMonth = financialRecords
         .filter((r) => r.type === "advance" && !r.repaid && (!r.month || r.month === monthKey))
         .reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    const advanceDeduction = activeAdvanceForMonth;
 
-    const remainingLoanAfterMonth = Math.max(0, remainingLoanBeforeMonth - loanDeduction);
+    // Calculate actual advance cut based on available grossEarned
+    const advanceDeduction = Math.min(grossEarned, activeAdvanceForMonth);
+    const uncoveredAdvance = Math.max(0, activeAdvanceForMonth - advanceDeduction);
+
+    // Remaining gross salary available for loan deduction
+    const remainingGrossForLoan = Math.max(0, grossEarned - advanceDeduction);
+
+    // Loan deduction capped at remaining loan before month AND remaining gross salary
+    const requestedLoanDeduction = Math.min(remainingLoanBeforeMonth, configuredLoanDeduction);
+    const loanDeduction = Math.min(remainingGrossForLoan, requestedLoanDeduction);
+
+    // Remaining loan carried forward to next month:
+    // Subtract actual loan deduction cut, and add any uncovered advance amount
+    const remainingLoanAfterMonth = Math.max(0, remainingLoanBeforeMonth - loanDeduction + uncoveredAdvance);
     const netSalary = Math.max(0, Math.round(grossEarned - advanceDeduction - loanDeduction));
 
     return {
