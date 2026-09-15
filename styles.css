@@ -1896,9 +1896,9 @@ input, textarea {
    VIEW ATTENDANCE MODAL
    ===================================================== */
 .view-attendance-modal-content {
-    max-width: 720px;
-    width: 95vw;
-    max-height: 90vh;
+    max-width: 1200px;
+    width: 96vw;
+    max-height: 92vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -2291,6 +2291,10 @@ input, textarea {
     color: #fff !important;
     font-size: 0.8rem !important;
     min-width: 100px;
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    border-right: 2px solid var(--border-color);
 }
 .th-edited-col { width: 22px !important; padding: 4px !important; }
 
@@ -2301,6 +2305,10 @@ input, textarea {
     color: var(--text-secondary);
     white-space: nowrap;
     border-right: 2px solid var(--border-color);
+    position: sticky;
+    left: 0;
+    background: #fff !important;
+    z-index: 1;
 }
 
 /* Cell-level status variants (used in multi-column layout) */
@@ -2359,6 +2367,10 @@ input, textarea {
     color: var(--text-primary);
     white-space: nowrap;
     border-right: 2px solid var(--border-color) !important;
+    position: sticky;
+    left: 0;
+    background: linear-gradient(135deg, #f8faff, #f0f4ff) !important;
+    z-index: 1;
 }
 .summary-val {
     font-weight: 800;
