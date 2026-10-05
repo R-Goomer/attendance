@@ -327,6 +327,40 @@ function attendanceCardDocRef(cardId) {
 }
 
 // ========================================================
+// TERMINATION HELPERS (soft-delete: keeps past ledger intact)
+// ========================================================
+function isTerminated(emp) {
+    return !!(emp && emp.terminated);
+}
+
+function getActiveEmployees() {
+    return employees.filter((emp) => !isTerminated(emp));
+}
+
+// "YYYY-MM" of the month an employee was terminated (null if still active)
+function getTerminationMonthKey(emp) {
+    if (!isTerminated(emp) || !emp.terminatedOn) return null;
+    return emp.terminatedOn.slice(0, 7);
+}
+
+// True when the employee was already terminated before the given "YYYY-MM" month
+function isTerminatedBeforeMonth(emp, monthKey) {
+    const termMonth = getTerminationMonthKey(emp);
+    return !!termMonth && termMonth < monthKey;
+}
+
+// Last day (1-31) the employee was active within the given month, or 0 if
+// they were terminated before the month started.
+function getTerminationCutoffDay(emp, year, month) {
+    if (!isTerminated(emp)) return getDaysInMonth(Number(year), Number(month));
+    const termMonth = getTerminationMonthKey(emp);
+    const monthKey = `${year}-${month}`;
+    if (!termMonth || termMonth > monthKey) return getDaysInMonth(Number(year), Number(month));
+    if (termMonth < monthKey) return 0;
+    return Math.min(Number(emp.terminatedOn.slice(8, 10)) || 1, getDaysInMonth(Number(year), Number(month)));
+}
+
+// ========================================================
 // AUTH FLOW
 // ========================================================
 function setupAuthListeners() {
@@ -1049,7 +1083,9 @@ async function downloadAttendanceForMonth() {
         const employeesList = employeesSnapshot.docs.map((docItem) => ({
             id: docItem.id,
             ...docItem.data(),
-        }));
+        }))
+            // Keep terminated employees only for months up to their termination month
+            .filter((emp) => !isTerminatedBeforeMonth(emp, monthKey));
 
         if (employeesList.length === 0) {
             showToast("❌ No employees found to export");
@@ -1075,7 +1111,10 @@ async function downloadAttendanceForMonth() {
         const header1 = ["Date"];
         const header2 = [""];
         employeesList.forEach((employee) => {
-            header1.push(employee.name || employee.id, "", "");
+            const label = isTerminated(employee)
+                ? `${employee.name || employee.id} (TERMINATED)`
+                : (employee.name || employee.id);
+            header1.push(label, "", "");
             header2.push("IN", "OUT", "Hours Missed");
         });
 
@@ -1093,6 +1132,14 @@ async function downloadAttendanceForMonth() {
             employeesList.forEach((employee, idx) => {
                 const card = attendanceMap[`${employee.id}_${monthKey}`];
                 const dayRecord = card?.attendance?.[String(day)] || null;
+
+                // Days after termination: no attendance expected (ledger stops at termination date)
+                const cutoffDay = getTerminationCutoffDay(employee, selectedYear, selectedMonth);
+                if (day > cutoffDay) {
+                    row.push("Terminated", "—", "—");
+                    return;
+                }
+
                 let inValue = "";
                 let outValue = "";
                 let missedValue = "";
@@ -1598,19 +1645,62 @@ async function handleAddEmployee(event) {
 
 async function deleteEmployee(employee) {
     const empDisplayName = employee.name || employee.id;
-    if (!confirm(`Delete employee "${empDisplayName}" (${employee.id})? This action cannot be undone.`)) {
+    if (!confirm(`Terminate employee "${empDisplayName}" (${employee.id})?\n\nThey will be removed from the home dashboard and future attendance/salary, but their past attendance & salary ledger will be kept (shown as TERMINATED).`)) {
         return;
     }
 
     try {
-        await deleteDoc(employeeDocRef(employee.id));
-        employees = employees.filter((current) => current.id !== employee.id);
+        const terminatedOn = getTodayString();
+        // Soft-delete: keep the employee doc so past attendance & salary remain intact
+        await setDoc(employeeDocRef(employee.id), {
+            terminated: true,
+            terminatedOn,
+        }, { merge: true });
+
+        const targetEmp = employees.find((current) => current.id === employee.id);
+        if (targetEmp) {
+            targetEmp.terminated = true;
+            targetEmp.terminatedOn = terminatedOn;
+        }
+
         renderEmployees();
         renderMasterEmployeesList(masterEmployeeSearch?.value || "");
-        showToast(`✓ Employee ${empDisplayName} deleted`);
+        if (!masterSectionSalary?.classList.contains("hidden")) {
+            loadMasterSalaryData();
+        }
+        showToast(`✓ Employee ${empDisplayName} terminated — past records kept`);
     } catch (error) {
-        console.error("Error deleting employee:", error);
-        showToast("❌ Error: Could not delete employee. Check Firebase setup.");
+        console.error("Error terminating employee:", error);
+        showToast("❌ Error: Could not terminate employee. Check Firebase setup.");
+    }
+}
+
+async function restoreEmployee(empId) {
+    const targetEmp = employees.find((current) => current.id === empId);
+    if (!targetEmp) return;
+
+    if (!confirm(`Restore employee "${targetEmp.name || targetEmp.id}" (${empId})?\n\nThey will reappear on the home dashboard and be counted as active from today.`)) {
+        return;
+    }
+
+    try {
+        await setDoc(employeeDocRef(empId), {
+            terminated: deleteField(),
+            terminatedOn: deleteField(),
+        }, { merge: true });
+
+        targetEmp.terminated = false;
+        targetEmp.terminatedOn = null;
+
+        renderEmployees();
+        renderMasterEmployeesList(masterEmployeeSearch?.value || "");
+        if (!masterSectionSalary?.classList.contains("hidden")) {
+            loadMasterSalaryData();
+        }
+        showToast(`✓ Employee ${targetEmp.name || empId} restored`);
+    } catch (error) {
+        console.error("Error restoring employee:", error);
+        showToast("❌ Error: Could not restore employee. Check Firebase setup.");
     }
 }
 
@@ -1620,7 +1710,10 @@ async function deleteEmployee(employee) {
 function renderEmployees() {
     employeesGrid.innerHTML = "";
 
-    if (employees.length === 0) {
+    // Hide terminated employees from the home dashboard (their ledger is kept in Master)
+    const activeEmployees = getActiveEmployees();
+
+    if (activeEmployees.length === 0) {
         employeesGrid.innerHTML = `
             <div class="loading-placeholder">
                 <p>No employees found. Add one to get started.</p>
@@ -1629,7 +1722,7 @@ function renderEmployees() {
         return;
     }
 
-    employees.forEach((employee) => {
+    activeEmployees.forEach((employee) => {
         const card = createEmployeeCard(employee);
         employeesGrid.appendChild(card);
     });
@@ -2030,7 +2123,15 @@ function calculateMissedMinutes(inStr, outStr, dayRecord = null) {
 
 function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     const daysInMonth = getDaysInMonth(Number(year), Number(month));
-    const baseSalary = Number(emp.salary || 0);
+    const fullBaseSalary = Number(emp.salary || 0);
+
+    // Last day this employee was active in this month (daysInMonth if still active)
+    const cutoffDay = getTerminationCutoffDay(emp, year, month);
+
+    // Prorate base salary up to the termination date (0 if terminated before this month)
+    const baseSalary = cutoffDay >= daysInMonth
+        ? fullBaseSalary
+        : Math.round(fullBaseSalary * (cutoffDay / daysInMonth));
 
     // Multipliers (default 208h divisor and 1.25x penalty, customizable per employee)
     const hoursDivisor = emp.hoursDivider !== undefined && emp.hoursDivider !== "" && !isNaN(Number(emp.hoursDivider)) && Number(emp.hoursDivider) > 0
@@ -2040,11 +2141,11 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
         ? Number(emp.penaltyMultiplier)
         : 1.25;
 
-    // Daily wage = Salary / number of days in the month = 30
-    const dailyWage = baseSalary > 0 ? (baseSalary / 30) : 0;
+    // Daily wage = Salary / number of days in the month = 30 (always from full salary)
+    const dailyWage = fullBaseSalary > 0 ? (fullBaseSalary / 30) : 0;
 
     // Hourly base rate = Salary / 208 default (editable)
-    const hourlyBaseRate = baseSalary > 0 ? (baseSalary / hoursDivisor) : 0;
+    const hourlyBaseRate = fullBaseSalary > 0 ? (fullBaseSalary / hoursDivisor) : 0;
 
     const attendance = attendanceCard?.attendance || {};
     let presentDays = 0;
@@ -2057,6 +2158,8 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     const weekMap = {};
 
     for (let d = 1; d <= daysInMonth; d++) {
+        if (d > cutoffDay) continue; // no attendance or salary beyond termination date
+
         const dateObj = new Date(Number(year), Number(month) - 1, d);
         const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ...
         const dayKey = String(d);
@@ -2153,6 +2256,9 @@ function calculateEmployeeSalary(emp, year, month, attendanceCard) {
     return {
         baseSalary,
         daysInMonth,
+        activeDays: cutoffDay,
+        terminated: isTerminated(emp),
+        terminatedOn: isTerminated(emp) ? emp.terminatedOn : null,
         dailyWage,
         hoursDivisor,
         penaltyMultiplier,
@@ -2214,7 +2320,9 @@ async function loadMasterSalaryData() {
             return;
         }
 
-        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+        const sortedEmployees = [...employees]
+            .filter((emp) => !isTerminatedBeforeMonth(emp, monthKey))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
         let totalBase = 0;
         let totalAttendanceCut = 0;
@@ -2222,6 +2330,21 @@ async function loadMasterSalaryData() {
         let totalNet = 0;
 
         masterSalaryTableBody.innerHTML = "";
+
+        if (sortedEmployees.length === 0) {
+            masterSalaryTableBody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 24px; color: var(--text-secondary);">
+                        No employees to show for ${selectedMonth}/${selectedYear}.
+                    </td>
+                </tr>
+            `;
+            statTotalBaseSalary.textContent = "₹0";
+            statTotalAttendanceCuts.textContent = "-₹0";
+            statTotalLoanAdvDeductions.textContent = "-₹0";
+            statTotalNetPayout.textContent = "₹0";
+            return;
+        }
 
         sortedEmployees.forEach((emp) => {
             const card = attendanceMap[`${emp.id}_${monthKey}`];
@@ -2233,9 +2356,13 @@ async function loadMasterSalaryData() {
             totalNet += calc.netSalary;
 
             const tr = document.createElement("tr");
+            if (isTerminated(emp)) tr.classList.add("row-terminated");
+            const terminatedBadge = isTerminated(emp)
+                ? ` <span class="badge-terminated" title="Terminated on ${escapeHtml(emp.terminatedOn || "—")}">TERMINATED</span>`
+                : "";
             tr.innerHTML = `
                 <td>
-                    <strong>${escapeHtml(emp.name || emp.id)}</strong>
+                    <strong>${escapeHtml(emp.name || emp.id)}${terminatedBadge}</strong>
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHtml(emp.id)} &bull; ${escapeHtml(emp.jobTitle || "Staff")}</div>
                 </td>
                 <td>
@@ -2352,11 +2479,13 @@ function renderMasterEmployeesList(filterQuery = "") {
 
         const hoursDivisor = emp.hoursDivider !== undefined && emp.hoursDivider !== "" ? emp.hoursDivider : 208;
         const penaltyMultiplier = emp.penaltyMultiplier !== undefined && emp.penaltyMultiplier !== "" ? emp.penaltyMultiplier : 1.25;
+        const terminated = isTerminated(emp);
 
         const tr = document.createElement("tr");
+        if (terminated) tr.classList.add("row-terminated");
         tr.innerHTML = `
             <td><span class="master-emp-id-badge">${escapeHtml(emp.id)}</span></td>
-            <td style="font-weight: 600;">${escapeHtml(emp.name || emp.id)}</td>
+            <td style="font-weight: 600;">${escapeHtml(emp.name || emp.id)}${terminated ? ` <span class="badge-terminated" title="Terminated on ${escapeHtml(emp.terminatedOn || "—")}">TERMINATED</span>` : ""}</td>
             <td style="color: var(--text-secondary);">${escapeHtml(emp.jobTitle || "Employee")}</td>
             <td>
                 <div>
@@ -2371,24 +2500,39 @@ function renderMasterEmployeesList(filterQuery = "") {
             </td>
             <td style="text-align: right;">
                 <div class="btn-action-group">
-                    <button class="btn-edit-salary-action" title="Set Base Salary & Rules">✏️ Rules</button>
-                    <button class="btn-loan-manage" title="Manage Loans & Advances">💳 Loan/Adv</button>
-                    <button class="btn-delete-emp-master" data-emp-id="${escapeHtml(emp.id)}" title="Delete Employee">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                            <path d="M10 11v6"></path>
-                            <path d="M14 11v6"></path>
-                        </svg>
-                        Delete
-                    </button>
+                    ${terminated ? `
+                        <button class="btn-restore-emp-master" data-emp-id="${escapeHtml(emp.id)}" title="Restore Employee">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="1 4 1 10 7 10"></polyline>
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                            </svg>
+                            Restore
+                        </button>
+                    ` : `
+                        <button class="btn-edit-salary-action" title="Set Base Salary & Rules">✏️ Rules</button>
+                        <button class="btn-loan-manage" title="Manage Loans & Advances">💳 Loan/Adv</button>
+                        <button class="btn-delete-emp-master" data-emp-id="${escapeHtml(emp.id)}" title="Terminate Employee — keeps past attendance & salary">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                                <path d="M10 11v6"></path>
+                                <path d="M14 11v6"></path>
+                            </svg>
+                            Delete
+                        </button>
+                    `}
                 </div>
             </td>
         `;
 
-        tr.querySelector(".btn-edit-salary-action").addEventListener("click", () => openEditSalaryModal(emp));
-        tr.querySelector(".btn-loan-manage").addEventListener("click", () => openLoanAdvanceModal(emp));
-        tr.querySelector(".btn-delete-emp-master").addEventListener("click", () => deleteEmployee(emp));
+        if (!terminated) {
+            tr.querySelector(".btn-edit-salary-action").addEventListener("click", () => openEditSalaryModal(emp));
+            tr.querySelector(".btn-loan-manage").addEventListener("click", () => openLoanAdvanceModal(emp));
+        }
+        const deleteBtn = tr.querySelector(".btn-delete-emp-master");
+        if (deleteBtn) deleteBtn.addEventListener("click", () => deleteEmployee(emp));
+        const restoreBtn = tr.querySelector(".btn-restore-emp-master");
+        if (restoreBtn) restoreBtn.addEventListener("click", () => restoreEmployee(emp.id));
 
         tbody.appendChild(tr);
     });
@@ -2696,7 +2840,7 @@ function renderSingleSlipHalfHTML(emp, year, month, calc, copyLabel) {
             <div class="slip-emp-box">
                 <div class="slip-emp-field">
                     <span class="slip-emp-label">Employee Name</span>
-                    <span class="slip-emp-val">${escapeHtml(emp.name || emp.id)}</span>
+                    <span class="slip-emp-val">${escapeHtml(emp.name || emp.id)}${isTerminated(emp) ? ` <span class="badge-terminated" style="font-size: 0.6rem;">TERMINATED</span>` : ""}</span>
                 </div>
                 <div class="slip-emp-field">
                     <span class="slip-emp-label">Employee ID</span>
@@ -2708,7 +2852,7 @@ function renderSingleSlipHalfHTML(emp, year, month, calc, copyLabel) {
                 </div>
                 <div class="slip-emp-field">
                     <span class="slip-emp-label">Pay Period</span>
-                    <span class="slip-emp-val">${calc.daysInMonth} Days (${calc.presentDays} Present)</span>
+                    <span class="slip-emp-val">${calc.activeDays} Days (${calc.presentDays} Present)${isTerminated(emp) ? ` — till ${escapeHtml(emp.terminatedOn || "")}` : ""}</span>
                 </div>
             </div>
 
@@ -2842,14 +2986,17 @@ function downloadSingleSalarySlipPDF(empName, monthKey) {
 }
 
 function renderCompactCardHTML(emp, calc) {
+    const terminatedTag = isTerminated(emp)
+        ? ` <span style="background: #dc2626; color: #fff; border-radius: 2px; padding: 0 3px; font-size: 7px; font-weight: bold;">TERMINATED</span>`
+        : "";
     return `
         <div style="border: 1px solid #000; border-radius: 3px; padding: 4px 5px; background: #fff; color: #000; font-size: 8.5px; box-sizing: border-box; font-family: sans-serif; line-height: 1.25;">
             <div style="font-weight: bold; font-size: 9.5px; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">
-                ${escapeHtml(emp.name || emp.id)} <span style="font-weight: normal; font-size: 7.5px; color: #333;">(${escapeHtml(emp.id)})</span>
+                ${escapeHtml(emp.name || emp.id)}${terminatedTag} <span style="font-weight: normal; font-size: 7.5px; color: #333;">(${escapeHtml(emp.id)})</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 1px; color: #000;">
                 <span>Base: ₹${calc.baseSalary.toLocaleString("en-IN")}</span>
-                <span>Att: ${calc.presentDays}/${calc.daysInMonth}d</span>
+                <span>Att: ${calc.presentDays}/${calc.activeDays}d</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 1px; color: #000;">
                 <span>Abs Cut (${calc.totalAbsentDays}d):</span>
@@ -2934,7 +3081,9 @@ async function handleDownloadAllPayslips() {
             return;
         }
 
-        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+        const sortedEmployees = [...employees]
+            .filter((emp) => !isTerminatedBeforeMonth(emp, monthKey))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
         const calcMap = {};
         sortedEmployees.forEach(emp => {
@@ -3000,7 +3149,9 @@ async function handlePrintAllPayslips() {
         const attendanceMap = {};
         attendanceSnap.forEach((d) => { attendanceMap[d.id] = d.data(); });
 
-        const sortedEmployees = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+        const sortedEmployees = [...employees]
+            .filter((emp) => !isTerminatedBeforeMonth(emp, monthKey))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
         const calcMap = {};
         sortedEmployees.forEach(emp => {
@@ -3084,7 +3235,15 @@ async function loadViewAttendance() {
             wrap.innerHTML = '<p class="view-placeholder">No employees found.</p>';
             return;
         }
-        const empList = [...employees].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+        // Keep terminated employees only for months up to their termination month
+        const empList = [...employees]
+            .filter((emp) => !isTerminatedBeforeMonth(emp, monthKey))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+        if (empList.length === 0) {
+            wrap.innerHTML = '<p class="view-placeholder">No employees to show for this month.</p>';
+            return;
+        }
 
         // ── Fetch attendance cards for all employees this month ──
         const attendanceQuery = query(
@@ -3108,7 +3267,10 @@ async function loadViewAttendance() {
         let header1 = `<tr><th rowspan="2" class="th-date">Date</th>`;
         let header2 = `<tr>`;
         empList.forEach(emp => {
-            header1 += `<th colspan="4" class="th-emp-name">${escapeHtml(emp.name)}</th>`;
+            const termTag = isTerminated(emp)
+                ? ` <span class="badge-terminated" style="font-size: 0.6rem;" title="Terminated on ${escapeHtml(emp.terminatedOn || "—")}">TERMINATED</span>`
+                : "";
+            header1 += `<th colspan="4" class="th-emp-name">${escapeHtml(emp.name)}${termTag}</th>`;
             header2 += `<th>IN</th><th>OUT</th><th>Hrs&nbsp;Missed</th><th class="th-edited-col"></th>`;
         });
         header1 += `</tr>`;
@@ -3133,6 +3295,13 @@ async function loadViewAttendance() {
                 const card = attendanceMap[`${emp.id}_${monthKey}`];
                 const rec = card?.attendance?.[dayKey] || null;
                 const isEdited = !!(rec?.editNote);
+
+                // Days after termination: no attendance expected
+                const cutoffDay = getTerminationCutoffDay(emp, selectedYear, selectedMonth);
+                if (d > cutoffDay) {
+                    cells += `<td class="cell-terminated">—</td><td class="cell-terminated">—</td><td class="cell-terminated cell-missed">—</td><td class="cell-edit-icon"></td>`;
+                    return;
+                }
 
                 let inVal = "—", outVal = "—", missedVal = "—";
                 let cellClass = "";
